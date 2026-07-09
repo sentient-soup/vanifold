@@ -1,0 +1,13 @@
+# Rust
+target/
+
+# Node / SvelteKit
+node_modules/
+.svelte-kit/
+ui/build/
+
+# Runtime artifacts
+*.db
+*.db-wal
+*.db-shm
+.env
