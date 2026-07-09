@@ -5,7 +5,8 @@ entity semantics: everything an HA MQTT Discovery payload can describe maps into
 this model losslessly, and van-native concepts extend it. Nothing outside the
 discovery module ever sees an HA payload.
 
-Status: DRAFT. Open questions at the bottom are genuinely open.
+Status: ACCEPTED 2026-07-09, with the draft answers to the questions at the
+bottom confirmed as decisions.
 
 ## Object hierarchy
 
@@ -102,14 +103,12 @@ tiered history tables (raw ~48h, 1-min ~30d, 1-hour indefinitely) keyed by
 `entity_id`. Only numeric and on/off states are historized by default; text and
 attribute churn are not.
 
-## Open questions (tear these apart)
+## Resolved questions (2026-07-09, draft answers confirmed)
 
-1. Should subsystem assignment live on the Device or the Entity? Current draft:
-   Entity, because one node hosts entities from multiple subsystems.
-2. `criticality` on the entity vs on the interlock only. Current draft: entity,
-   so the UI can treat safety things specially even before any interlock exists.
-3. Is `Tank` the right first composite, or is the general concept a user-defined
-   "fixture" (named bundle of entities) with tank as a template? Draft says
-   hardcode Tank now, generalize when a second composite appears.
-4. Zones/locations (cab, galley, garage) as a third grouping axis: defer or
-   include? Draft: defer; subsystems carry v0.1.
+1. Subsystem assignment lives on the **Entity**, because one node hosts entities
+   from multiple subsystems.
+2. `criticality` lives on the **entity**, so the UI can treat safety things
+   specially even before any interlock exists.
+3. **Tank is hardcoded** as the first composite; generalize into user-defined
+   "fixtures" only when a second composite actually appears.
+4. Zones/locations (cab, galley, garage) are **deferred**; subsystems carry v0.1.

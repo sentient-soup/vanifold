@@ -1,9 +1,10 @@
-# MQTT Conventions (draft v0.1)
+# MQTT Conventions (v0.1)
 
 How everything meets on the spine. The core daemon speaks only MQTT; if a device
 cannot reach the broker, an adapter (node firmware or sidecar bridge) gets it there.
 
-Status: DRAFT. Open questions at the bottom.
+Status: ACCEPTED. Former open questions resolved 2026-07-09; resolutions inlined
+in their sections.
 
 ## Broker
 
@@ -51,11 +52,38 @@ the whole ecosystem already uses IS the plug-n-play feature.
 1. UI/API issues a command against an entity.
 2. Core validates against tier-3 interlocks (reject with a reason, never queue
    silently).
-3. Core publishes the entity's declared `command_topic` payload, QoS 1.
+3. Core publishes the entity's declared `command_topic` payload, QoS 1, retain
+   never set, with an MQTT v5 message expiry interval of 10s (see below).
 4. State is **confirmed, not optimistic**: the entity updates when the device
    echoes its state topic. The UI shows a pending indicator until echo or timeout
-   (default 5s), then surfaces failure. Devices flagged `optimistic` in their
-   discovery payload are the only exception.
+   (uniform 5s across all kinds), then surfaces failure. Devices flagged
+   `optimistic` in their discovery payload are the only exception.
+
+Acknowledgment vs completion: the 5s window is only "did the device hear me".
+Long-running motion (a 30s winch travel) is a state concern, not a command
+concern: the cover sits in `opening`/`closing` and its travel timeout is the
+node's Tier 2 responsibility, never the hub's. The hub flags an entity stuck in
+a transitional state for over 5 minutes as a diagnostics warning (misbehaving
+node), not an enforcement action.
+
+## Command replay safety
+
+Two broker mechanisms can actuate a device at a moment nobody asked for:
+
+- **Retained commands**: a retained `open` on a command topic is re-delivered
+  every time the subscriber reconnects (the 3am-winch scenario). The core never
+  sets retain on command publishes and never treats a retained message as a live
+  actuation trigger. Absolute in v0.1. A per-entity `retain_commands` opt-in for
+  memoryless third-party gear is a documented future escape hatch, refused for
+  `criticality: safety` entities, and not built until a real device demands it.
+  Devices we build restore desired state locally (ESPHome `restore_mode`), per
+  the Tier 2 principle: state persistence belongs on the node, not the broker.
+- **Offline-queue replay**: QoS 1 commands published while a persistent-session
+  subscriber is offline are queued and delivered on reconnect, minutes or hours
+  later. The retain ban does not cover this path; the MQTT v5 **message expiry
+  interval** (10s) on every command publish does. The broker discards expired
+  commands from queues and retained storage regardless of subscriber firmware or
+  protocol version, so this protects third-party devices too.
 
 ## QoS and retention
 
@@ -74,14 +102,18 @@ the whole ecosystem already uses IS the plug-n-play feature.
   `vanifold/bridge/<name>/status`. A bridge is indistinguishable from a native
   MQTT device by design; the core has no bridge-specific code paths.
 
-## Open questions (tear these apart)
+## Resolved questions (2026-07-09)
 
-1. Command echo timeout: 5s default, but winch travel takes ~30s+. Covers report
-   `opening`/`closing` intermediate states, which solves it for kind `cover`;
-   is a per-kind timeout table enough?
-2. Should the core republish a normalized state tree under `vanifold/state/#`
-   for third-party consumers, or is the WebSocket API the only egress in v0.1?
-   Draft: WebSocket only; republish when the HA-export bridge lands.
-3. Retained command topics are a known foot-gun (replayed actuations after
-   reconnect). Draft: core never retains commands and refuses to actuate from a
-   retained command echo. Any counter-case?
+1. **Command timeouts**: no per-kind table. One uniform 5s acknowledgment
+   timeout; travel/completion time is node-owned (Tier 2). Inlined above.
+2. **Normalized state republish**: rejected for v0.1. WebSocket/REST is the only
+   egress; a public `vanifold/state/#` tree would be a second forever-stable API
+   frozen before the internal model has met real devices, and the raw device
+   topics are already on the broker for tinkerers. The HA-export bridge becomes
+   the normalized MQTT egress when it lands, built once for a concrete consumer.
+3. **Retained commands**: ban is absolute, plus MQTT v5 message expiry (10s) on
+   all command publishes to also close the offline-queue replay path. Inlined in
+   "Command replay safety". (Deadline-as-user-properties schemes from industrial
+   SDN-MQTT research were considered and rejected: user properties are opaque to
+   the broker and require subscriber cooperation, which third-party devices will
+   never provide; broker-enforced expiry gives the useful half for free.)
