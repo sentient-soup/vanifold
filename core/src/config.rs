@@ -28,6 +28,9 @@ pub struct MqttConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct ApiConfig {
     pub listen: String,
+    /// Directory holding the built UI (SvelteKit adapter-static output).
+    /// Served with SPA fallback when it exists; API-only otherwise.
+    pub ui_dir: PathBuf,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -61,7 +64,7 @@ impl Default for MqttConfig {
 
 impl Default for ApiConfig {
     fn default() -> Self {
-        ApiConfig { listen: "0.0.0.0:8480".into() }
+        ApiConfig { listen: "0.0.0.0:8480".into(), ui_dir: "ui/build".into() }
     }
 }
 

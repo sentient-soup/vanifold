@@ -51,20 +51,26 @@ fn snapshot_json(app: &App) -> serde_json::Value {
     })
 }
 
-pub fn router(app: App) -> Router {
-    Router::new()
-        .route("/", get(index))
+pub fn router(app: App, ui_dir: Option<PathBuf>) -> Router {
+    let api = Router::new()
         .route("/api/entities", get(entities))
         .route("/api/devices", get(devices))
         .route("/api/quarantine", get(quarantine))
         .route("/api/history/{entity_id}", get(history))
         .route("/api/ws", get(ws_upgrade))
-        .with_state(app)
+        .with_state(app);
+    match ui_dir {
+        // SPA: unknown paths fall back to index.html (adapter-static fallback build).
+        Some(dir) => api.fallback_service(
+            tower_http::services::ServeDir::new(&dir)
+                .not_found_service(tower_http::services::ServeFile::new(dir.join("index.html"))),
+        ),
+        None => api.route("/", get(index)),
+    }
 }
 
 async fn index() -> &'static str {
-    // ponytail: placeholder until the SvelteKit build is embedded here.
-    "vanifold-core is running. API at /api, live stream at /api/ws."
+    "vanifold-core is running. API at /api, live stream at /api/ws. (No UI build found; set api.ui_dir or build ui/.)"
 }
 
 async fn entities(State(app): State<App>) -> Json<serde_json::Value> {

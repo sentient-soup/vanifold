@@ -57,8 +57,13 @@ async fn main() {
             std::process::exit(1);
         }
     };
+    let ui_dir = cfg.api.ui_dir.join("index.html").exists().then(|| cfg.api.ui_dir.clone());
+    match &ui_dir {
+        Some(d) => tracing::info!(dir = %d.display(), "serving UI"),
+        None => tracing::info!(dir = %cfg.api.ui_dir.display(), "no UI build found, API only"),
+    }
     tracing::info!(listen = %cfg.api.listen, "API listening");
-    if let Err(e) = axum::serve(listener, api::router(app)).await {
+    if let Err(e) = axum::serve(listener, api::router(app, ui_dir)).await {
         tracing::error!(%e, "API server exited");
     }
 }
