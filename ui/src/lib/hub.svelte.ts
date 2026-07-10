@@ -2,8 +2,8 @@
 // command dispatch with pending tracking (confirmed-not-optimistic:
 // pending clears on the state echo, not on send).
 
-import type { Command, Device, Entity, EntityState } from './types';
-import { demoEntities, demoDevices, demoSimulate } from './demo';
+import type { Command, Device, Entity, EntityState, Quarantined } from './types';
+import { demoEntities, demoDevices, demoSimulate, demoHistory } from './demo';
 
 type Conn = 'connecting' | 'online' | 'offline' | 'demo';
 
@@ -14,7 +14,11 @@ export const hub = $state({
 	/** entity_id -> send timestamp; presence = command in flight */
 	pending: {} as Record<string, number>,
 	notice: null as string | null,
-	now: Date.now()
+	now: Date.now(),
+	/** entity id whose detail drawer is open */
+	selected: null as string | null,
+	quarantine: [] as Quarantined[],
+	quarantineOpen: false
 });
 
 let ws: WebSocket | null = null;
@@ -29,8 +33,46 @@ export function start() {
 		hub.devices = demoDevices();
 	} else {
 		connect();
+		refreshQuarantine();
 	}
 	setInterval(() => (hub.now = Date.now()), 10_000);
+}
+
+export async function refreshQuarantine() {
+	try {
+		const r = await fetch('/api/quarantine');
+		hub.quarantine = (await r.json()).quarantine ?? [];
+	} catch {
+		// hub unreachable; the connection lamp already says so
+	}
+}
+
+/** History buckets for an entity (last `hours`). Demo mode synthesizes. */
+export async function fetchHistory(entityId: string, hours = 12) {
+	if (demo) return demoHistory(entityId, hours);
+	const to = Date.now();
+	const from = to - hours * 3600_000;
+	const r = await fetch(`/api/history/${encodeURIComponent(entityId)}?from=${from}&to=${to}`);
+	if (!r.ok) return [];
+	return (await r.json()).points as { ts: number; vmin: number; vmax: number; vavg: number }[];
+}
+
+/** Persist a metadata edit; the EntityUpserted broadcast updates the store. */
+export async function patchEntity(
+	entityId: string,
+	patch: { name?: string; subsystem?: string; criticality?: string }
+) {
+	if (demo) {
+		const e = hub.entities[entityId];
+		if (e) Object.assign(e, patch);
+		return;
+	}
+	const r = await fetch(`/api/entities/${encodeURIComponent(entityId)}`, {
+		method: 'PATCH',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(patch)
+	});
+	if (!r.ok) flash(`edit failed: ${await r.text()}`);
 }
 
 function connect() {

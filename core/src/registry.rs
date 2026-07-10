@@ -37,6 +37,15 @@ pub enum Event {
     },
 }
 
+/// User-editable entity metadata (PATCH /api/entities/{id}).
+#[derive(Debug, serde::Deserialize)]
+pub struct MetaPatch {
+    pub name: Option<String>,
+    /// Empty string clears the subsystem back to unassigned.
+    pub subsystem: Option<String>,
+    pub criticality: Option<Criticality>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct QuarantineItem {
     pub topic: String,
@@ -432,6 +441,37 @@ impl Registry {
             _ => return Err(unsupported()),
         };
         Ok(publishes)
+    }
+
+    /// Apply a user metadata edit. These fields survive re-announcement
+    /// (see upsert) and persist through the store.
+    pub fn update_meta(&self, id: &str, patch: MetaPatch) -> Option<Entity> {
+        let mut inner = self.inner.write().unwrap();
+        let e = inner.entities.get_mut(id)?;
+        if let Some(n) = patch.name {
+            let n = n.trim();
+            if !n.is_empty() {
+                e.name = n.to_string();
+            }
+        }
+        if let Some(s) = patch.subsystem {
+            let s = s.trim();
+            e.subsystem = (!s.is_empty()).then(|| s.to_string());
+        }
+        if let Some(c) = patch.criticality {
+            e.criticality = c;
+        }
+        let entity = e.clone();
+        drop(inner);
+        self.store
+            .send(StoreMsg::UpsertEntity(Box::new(entity.clone())))
+            .ok();
+        self.events
+            .send(Event::EntityUpserted {
+                entity: Box::new(entity.clone()),
+            })
+            .ok();
+        Some(entity)
     }
 
     pub fn entities_snapshot(&self) -> Vec<Entity> {

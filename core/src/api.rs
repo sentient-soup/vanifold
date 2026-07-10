@@ -54,6 +54,7 @@ fn snapshot_json(app: &App) -> serde_json::Value {
 pub fn router(app: App, ui_dir: Option<PathBuf>) -> Router {
     let api = Router::new()
         .route("/api/entities", get(entities))
+        .route("/api/entities/{entity_id}", axum::routing::patch(update_entity))
         .route("/api/devices", get(devices))
         .route("/api/quarantine", get(quarantine))
         .route("/api/history/{entity_id}", get(history))
@@ -106,6 +107,26 @@ mod embedded {
 
 async fn entities(State(app): State<App>) -> Json<serde_json::Value> {
     Json(serde_json::json!({ "entities": entities_json(&app) }))
+}
+
+async fn update_entity(
+    State(app): State<App>,
+    Path(entity_id): Path<String>,
+    Json(patch): Json<crate::registry::MetaPatch>,
+) -> Response {
+    match app.registry.update_meta(&entity_id, patch) {
+        Some(e) => {
+            let mut v = serde_json::to_value(&e).unwrap_or_default();
+            if let Some(obj) = v.as_object_mut() {
+                obj.insert(
+                    "quality".into(),
+                    serde_json::to_value(e.quality(now_ms(), app.stale_after_ms)).unwrap_or_default(),
+                );
+            }
+            Json(serde_json::json!({ "entity": v })).into_response()
+        }
+        None => (axum::http::StatusCode::NOT_FOUND, "unknown entity").into_response(),
+    }
 }
 
 async fn devices(State(app): State<App>) -> Json<serde_json::Value> {

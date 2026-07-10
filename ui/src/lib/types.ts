@@ -39,6 +39,13 @@ export type CommandCfg =
 	| { Light: { Basic: { brightness_command_topic?: string | null } } | { Json: { brightness: boolean } } }
 	| { Cover: { set_position_topic?: string | null } };
 
+export interface Quarantined {
+	topic: string;
+	payload: string;
+	reason: string;
+	ts: number;
+}
+
 export interface Device {
 	id: string;
 	name: string;

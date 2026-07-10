@@ -31,11 +31,25 @@
 	function toggle() {
 		send(entity.id, { command: isOn ? 'turn_off' : 'turn_on' });
 	}
+
+	function open(ev: MouseEvent | KeyboardEvent) {
+		// Controls stay controls; everything else opens the detail drawer.
+		if ((ev.target as HTMLElement).closest('button, input')) return;
+		hub.selected = entity.id;
+	}
 </script>
 
-<article class="card {q}" class:pending={isPending}>
+<div
+	class="card {q}"
+	class:pending={isPending}
+	onclick={open}
+	onkeydown={(ev) => ev.key === 'Enter' && open(ev)}
+	tabindex="0"
+	role="button"
+	aria-label="{entity.name} details">
 	<header>
 		<h3>{entity.name}</h3>
+		{#if entity.criticality === 'safety'}<span class="safety">safety</span>{/if}
 		<span class="lamp" title={q}></span>
 	</header>
 
@@ -74,7 +88,7 @@
 		<span class="device">{device}</span>
 		{#if QUALITY_LABEL[q]}<span class="qlabel">{QUALITY_LABEL[q]}</span>{/if}
 	</footer>
-</article>
+</div>
 
 <style>
 	.card {
@@ -93,6 +107,24 @@
 	}
 	.card.pending {
 		border-color: var(--amber);
+	}
+	.card {
+		cursor: pointer;
+	}
+	.card:hover {
+		border-color: var(--faint);
+	}
+
+	.safety {
+		font-family: var(--font-data);
+		font-size: 0.6rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--lamp-unavailable);
+		border: 1px solid var(--lamp-unavailable);
+		border-radius: 4px;
+		padding: 0.05rem 0.3rem;
+		align-self: center;
 	}
 
 	header {

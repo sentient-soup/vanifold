@@ -112,6 +112,20 @@ export function demoEntities(): Record<string, Entity> {
 	return Object.fromEntries(list.map((e) => [e.id, e]));
 }
 
+/** Synthesized history so the detail chart renders in demo mode. */
+export function demoHistory(entityId: string, hours: number) {
+	const e = demoEntities()[entityId];
+	const base = typeof e?.state?.value === 'number' ? (e.state.value as number) : 50;
+	const to = now();
+	const points = [];
+	for (let i = 0; i < hours * 12; i++) {
+		const ts = to - hours * 3600_000 + i * 300_000;
+		const v = base + Math.sin(i / 9) * base * 0.12 + Math.sin(i / 3.1) * base * 0.04;
+		points.push({ ts, vmin: v - base * 0.03, vmax: v + base * 0.03, vavg: v });
+	}
+	return points;
+}
+
 /** Local command simulation so the demo dashboard is playable. */
 export function demoSimulate(entities: Record<string, Entity>, id: string, cmd: Command) {
 	const e = entities[id];

@@ -8,10 +8,14 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { onMount } from 'svelte';
 	import { hub, start } from '$lib/hub.svelte';
+	import DetailPanel from '$lib/components/DetailPanel.svelte';
+	import QuarantinePanel from '$lib/components/QuarantinePanel.svelte';
 
 	let { children } = $props();
 	onMount(start);
 </script>
+
+<svelte:window onkeydown={(ev) => ev.key === 'Escape' && ((hub.selected = null), (hub.quarantineOpen = false))} />
 
 <svelte:head>
 	<title>vanifold</title>
@@ -24,13 +28,23 @@
 			<span class="mark"></span>
 			<span class="word">vanifold</span>
 		</div>
-		<div class="link" data-conn={hub.conn}>
-			{#if hub.conn === 'demo'}demo{:else if hub.conn === 'online'}link up{:else if hub.conn === 'offline'}link down{:else}connecting{/if}
-			<span class="conn-lamp"></span>
+		<div class="right">
+			{#if hub.quarantine.length > 0}
+				<button class="qbadge" onclick={() => (hub.quarantineOpen = true)}>
+					quarantine {hub.quarantine.length}
+				</button>
+			{/if}
+			<div class="link" data-conn={hub.conn}>
+				{#if hub.conn === 'demo'}demo{:else if hub.conn === 'online'}link up{:else if hub.conn === 'offline'}link down{:else}connecting{/if}
+				<span class="conn-lamp"></span>
+			</div>
 		</div>
 	</header>
 
 	{@render children()}
+
+	<DetailPanel />
+	<QuarantinePanel />
 
 	{#if hub.notice}
 		<div class="notice" role="status">{hub.notice}</div>
@@ -67,6 +81,25 @@
 		font-weight: 600;
 		font-size: 1.05rem;
 		letter-spacing: 0.04em;
+	}
+
+	.right {
+		display: flex;
+		align-items: center;
+		gap: 0.9rem;
+	}
+
+	.qbadge {
+		background: var(--amber-soft);
+		border: 1px solid var(--amber);
+		color: var(--amber);
+		border-radius: 999px;
+		padding: 0.2rem 0.7rem;
+		font-family: var(--font-data);
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		cursor: pointer;
 	}
 
 	.link {
