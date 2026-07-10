@@ -2,7 +2,16 @@ import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
+// Dev server proxies API + WebSocket to a running vanifold-core.
+// Point at the Pi with: VANIFOLD_API=http://vanhub.local:8480 npm run dev
+const apiTarget = process.env.VANIFOLD_API ?? 'http://localhost:8480';
+
 export default defineConfig({
+	server: {
+		proxy: {
+			'/api': { target: apiTarget, ws: true, changeOrigin: true }
+		}
+	},
 	plugins: [
 		sveltekit({
 			compilerOptions: {

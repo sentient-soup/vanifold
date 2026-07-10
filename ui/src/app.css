@@ -1,0 +1,73 @@
+/* vanifold design tokens: instrument panel at night.
+   Warm charcoal, amber illumination for interaction, mono numerals,
+   quality rendered as indicator lamps. Light mode = daylight paper. */
+
+:root {
+	--bg: #15171c;
+	--surface: #1d2026;
+	--surface-2: #23262e;
+	--line: #2d313b;
+	--text: #e9e7e1;
+	--dim: #8f939d;
+	--faint: #565a63;
+	--amber: #f0a63c;
+	--amber-soft: rgba(240, 166, 60, 0.14);
+	--lamp-live: #6fd18b;
+	--lamp-stale: #f0a63c;
+	--lamp-retained: #7a7f89;
+	--lamp-unavailable: #d15f5f;
+	--radius: 10px;
+	--font-ui: 'Barlow', system-ui, sans-serif;
+	--font-data: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+	:root {
+		--bg: #f1f0ed;
+		--surface: #ffffff;
+		--surface-2: #f5f4f1;
+		--line: #dcdad4;
+		--text: #23252a;
+		--dim: #6b6f78;
+		--faint: #a2a5ac;
+		--amber: #b06f10;
+		--amber-soft: rgba(176, 111, 16, 0.12);
+		--lamp-live: #2f9e57;
+		--lamp-stale: #b06f10;
+		--lamp-retained: #8f939d;
+		--lamp-unavailable: #bb4444;
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font-ui);
+	font-size: 15px;
+	line-height: 1.4;
+	-webkit-font-smoothing: antialiased;
+}
+
+button {
+	font-family: var(--font-ui);
+	color: inherit;
+}
+
+:focus-visible {
+	outline: 2px solid var(--amber);
+	outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}
