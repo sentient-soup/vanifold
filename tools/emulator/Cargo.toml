@@ -1,0 +1,13 @@
+[package]
+name = "vanifold-emulator"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Virtual MQTT devices for integration-testing a vanifold hub"
+
+[dependencies]
+rumqttc = { version = "0.25.1", default-features = false }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
