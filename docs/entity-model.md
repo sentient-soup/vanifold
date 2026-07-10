@@ -22,8 +22,9 @@ Subsystem (power, plumbing, climate, vehicle, computer, misc)
 - **Entity**: the atom. Belongs to exactly one device. Assigned to exactly one
   subsystem (auto-suggested from device_class/unit, user-overridable).
 - **Subsystem**: van-level grouping used by the UI and by cross-subsystem logic
-  (energy budgets, drive-mode rules). Fixed taxonomy for now; not user-extensible
-  until a real need appears.
+  (energy budgets, drive-mode rules). Fixed taxonomy v2 (see ui-taxonomy.md):
+  `power, water, climate, lighting, access, vehicle, media, misc`. Not
+  user-extensible until a real need appears.
 
 ## Entity anatomy
 

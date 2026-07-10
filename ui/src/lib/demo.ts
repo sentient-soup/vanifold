@@ -1,4 +1,4 @@
-// Demo fixtures: a plausible build of the owner's actual van (48V system,
+﻿// Demo fixtures: a plausible build of the owner's actual van (48V system,
 // winch-driven rear entry). Open the app with ?demo to develop and judge the
 // UI with no hardware attached. Commands are simulated locally.
 
@@ -72,27 +72,27 @@ export function demoEntities(): Record<string, Entity> {
 		}),
 		entity({
 			id: 'fresh_level', name: 'Fresh water', kind: 'sensor', unit: '%',
-			subsystem: 'plumbing', device_id: 'electronics-bay',
+			subsystem: 'water', device_id: 'electronics-bay',
 			state: { value: 63, updated_at: t, retained: false }
 		}),
 		entity({
 			id: 'grey_level', name: 'Grey water', kind: 'sensor', unit: '%',
-			subsystem: 'plumbing', device_id: 'electronics-bay',
+			subsystem: 'water', device_id: 'electronics-bay',
 			state: { value: 41, updated_at: t - 3_600_000, retained: false } // stale
 		}),
 		entity({
-			id: 'water_pump', name: 'Water pump', kind: 'switch', subsystem: 'plumbing',
+			id: 'water_pump', name: 'Water pump', kind: 'switch', subsystem: 'water',
 			device_id: 'electronics-bay', command: { Switch: {} }, criticality: 'comfort',
 			state: { value: true, updated_at: t, retained: false }
 		}),
 		entity({
-			id: 'rear_entry', name: 'Rear entry', kind: 'cover', subsystem: 'misc',
+			id: 'rear_entry', name: 'Rear entry', kind: 'cover', subsystem: 'access',
 			device_id: 'rear-entry', criticality: 'safety',
 			command: { Cover: {} },
 			state: { value: 'closed', updated_at: t, retained: false }
 		}),
 		entity({
-			id: 'galley_light', name: 'Galley light', kind: 'light', subsystem: 'misc',
+			id: 'galley_light', name: 'Galley light', kind: 'light', subsystem: 'lighting',
 			device_id: 'electronics-bay',
 			command: { Light: { Basic: { brightness_command_topic: 'x' } } },
 			state: { value: true, updated_at: t, retained: false },
@@ -100,7 +100,7 @@ export function demoEntities(): Record<string, Entity> {
 		}),
 		entity({
 			id: 'cab_door', name: 'Cab door', kind: 'binary_sensor', device_class: 'door',
-			subsystem: 'misc', device_id: 'scatter',
+			subsystem: 'access', device_id: 'scatter',
 			state: { value: false, updated_at: t, retained: false }
 		}),
 		entity({

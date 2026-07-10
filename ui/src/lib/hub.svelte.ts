@@ -25,6 +25,16 @@ let ws: WebSocket | null = null;
 let demo = false;
 let seq = 0;
 
+/** True when running against fixtures (?demo). Stable after start(). */
+export function isDemo() {
+	return demo;
+}
+
+/** Internal nav href that survives demo mode across reloads/deep links. */
+export function href(path: string) {
+	return demo ? `${path}?demo` : path;
+}
+
 export function start() {
 	demo = new URLSearchParams(location.search).has('demo');
 	if (demo) {

@@ -23,6 +23,7 @@
 	},
 	"dependencies": {
 		"@fontsource/barlow": "^5.2.8",
+		"@fontsource/barlow-condensed": "^5.2.8",
 		"@fontsource/ibm-plex-mono": "^5.2.7"
 	}
 }

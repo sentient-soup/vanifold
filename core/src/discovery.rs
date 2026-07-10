@@ -339,16 +339,19 @@ pub fn handle(topic: &str, payload: &[u8]) -> Outcome {
     });
 
     let device_class = str_of("device_class");
+    let display_name = str_of("name").unwrap_or_else(|| fallback_object.clone());
     let entity = Entity {
         id: sanitize_id(&unique_id),
         unique_id,
         device_id: device.id.clone(),
         subsystem: suggest_subsystem(
+            &kind,
             device_class.as_deref(),
             str_of("unit_of_measurement").as_deref(),
+            &display_name,
         ),
         kind: kind.clone(),
-        name: str_of("name").unwrap_or_else(|| fallback_object.clone()),
+        name: display_name,
         unit: str_of("unit_of_measurement"),
         device_class,
         criticality: Criticality::Info,
@@ -381,16 +384,56 @@ pub fn handle(topic: &str, payload: &[u8]) -> Outcome {
     }
 }
 
-/// First-pass subsystem suggestion from HA vocabulary. User-overridable.
-fn suggest_subsystem(device_class: Option<&str>, unit: Option<&str>) -> Option<String> {
+/// First-pass subsystem suggestion, taxonomy v2 (docs/ui-taxonomy.md).
+/// Order matters: unambiguous device classes, then name hints (so "Battery
+/// temp" lands in power, not climate), then ambient classes, then units.
+/// Suggestions only; user assignment always wins and survives re-announce.
+fn suggest_subsystem(
+    kind: &EntityKind,
+    device_class: Option<&str>,
+    unit: Option<&str>,
+    name: &str,
+) -> Option<String> {
+    if matches!(kind, EntityKind::Light) {
+        return Some("lighting".into());
+    }
+    if let Some(s) = match device_class {
+        Some("battery" | "current" | "voltage" | "power" | "energy" | "power_factor") => {
+            Some("power")
+        }
+        Some("door" | "garage_door" | "lock" | "window" | "opening") => Some("access"),
+        Some("moisture" | "water") => Some("water"),
+        _ => None,
+    } {
+        return Some(s.to_string());
+    }
+    let n = name.to_lowercase();
+    let hit = |hints: &[&str]| hints.iter().any(|h| n.contains(h));
+    if let Some(s) = if hit(&[
+        "battery",
+        "solar",
+        "inverter",
+        "shore",
+        "charg",
+        "alternator",
+    ]) {
+        Some("power")
+    } else if hit(&["water", "tank", "fresh", "grey", "gray", "pump", "valve"]) {
+        Some("water")
+    } else if hit(&["fuel", "tire", "tyre", "ignition"]) {
+        Some("vehicle")
+    } else if hit(&["door", "lock", "window", "awning", "bed", "gate"]) {
+        Some("access")
+    } else {
+        None
+    } {
+        return Some(s.to_string());
+    }
     let s = match device_class {
-        Some("battery" | "current" | "voltage" | "power" | "energy" | "power_factor") => "power",
         Some("temperature" | "humidity") => "climate",
-        Some("door" | "garage_door" | "lock" | "window") => "misc",
-        Some("moisture" | "water") => "plumbing",
         _ => match unit {
             Some("V" | "A" | "W" | "kWh" | "Wh") => "power",
-            Some("°C" | "°F" | "%") => "climate",
+            Some("°C" | "°F") => "climate",
             _ => return None,
         },
     };
@@ -473,6 +516,48 @@ mod tests {
             br#"{"uniq_id":"s1","stat_t":"a/b","val_tpl":"{{ value_json.x | round(1) }}"}"#,
         );
         assert!(matches!(out, Outcome::Quarantine { reason } if reason.contains("value_template")));
+    }
+
+    #[test]
+    fn subsystem_suggestions_taxonomy_v2() {
+        let s = |kind: &EntityKind, dc: Option<&str>, unit: Option<&str>, name: &str| {
+            suggest_subsystem(kind, dc, unit, name)
+        };
+        let sensor = EntityKind::Sensor;
+        // Light kind always wins.
+        assert_eq!(
+            s(&EntityKind::Light, None, None, "Galley"),
+            Some("lighting".into())
+        );
+        // Unambiguous classes first.
+        assert_eq!(
+            s(&sensor, Some("voltage"), Some("V"), "AC voltage"),
+            Some("power".into())
+        );
+        assert_eq!(
+            s(&EntityKind::Cover, Some("door"), None, "Rear entry"),
+            Some("access".into())
+        );
+        // Name hints beat ambient classes: battery temp is a power concern.
+        assert_eq!(
+            s(&sensor, Some("temperature"), Some("°C"), "Battery temp"),
+            Some("power".into())
+        );
+        assert_eq!(
+            s(&sensor, Some("temperature"), Some("°C"), "Cabin temp"),
+            Some("climate".into())
+        );
+        assert_eq!(
+            s(&sensor, None, Some("%"), "Fresh water"),
+            Some("water".into())
+        );
+        assert_eq!(s(&sensor, None, Some("%"), "Fuel"), Some("vehicle".into()));
+        assert_eq!(
+            s(&EntityKind::Switch, None, None, "Water pump"),
+            Some("water".into())
+        );
+        // A bare % is not a claim about anything.
+        assert_eq!(s(&sensor, None, Some("%"), "Mystery"), None);
     }
 
     #[test]

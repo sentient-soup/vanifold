@@ -16,9 +16,11 @@
 	--lamp-stale: #f0a63c;
 	--lamp-retained: #7a7f89;
 	--lamp-unavailable: #d15f5f;
+	--water: #5aa7c4;
 	--radius: 10px;
 	--font-ui: 'Barlow', system-ui, sans-serif;
 	--font-data: 'IBM Plex Mono', ui-monospace, monospace;
+	--font-display: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: light) {
@@ -36,6 +38,7 @@
 		--lamp-stale: #b06f10;
 		--lamp-retained: #8f939d;
 		--lamp-unavailable: #bb4444;
+		--water: #2f7d9b;
 	}
 }
 
