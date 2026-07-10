@@ -64,13 +64,18 @@ impl Default for MqttConfig {
 
 impl Default for ApiConfig {
     fn default() -> Self {
-        ApiConfig { listen: "0.0.0.0:8480".into(), ui_dir: "ui/build".into() }
+        ApiConfig {
+            listen: "0.0.0.0:8480".into(),
+            ui_dir: "ui/build".into(),
+        }
     }
 }
 
 impl Default for StoreConfig {
     fn default() -> Self {
-        StoreConfig { db_path: "vanifold.db".into() }
+        StoreConfig {
+            db_path: "vanifold.db".into(),
+        }
     }
 }
 
@@ -89,7 +94,8 @@ impl Config {
         match path {
             None => Ok(Config::default()),
             Some(p) => {
-                let text = std::fs::read_to_string(&p).map_err(|e| format!("read {}: {e}", p.display()))?;
+                let text = std::fs::read_to_string(&p)
+                    .map_err(|e| format!("read {}: {e}", p.display()))?;
                 toml::from_str(&text).map_err(|e| format!("parse {}: {e}", p.display()))
             }
         }

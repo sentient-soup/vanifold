@@ -8,7 +8,9 @@ use serde_json::{Map, Value as Json};
 /// Components we fully support in v0.1.
 const SUPPORTED: &[&str] = &["sensor", "binary_sensor", "switch", "light", "cover"];
 /// Components we parse and store, but expose no commands for yet.
-const DEFERRED: &[&str] = &["climate", "lock", "number", "select", "button", "fan", "camera", "event"];
+const DEFERRED: &[&str] = &[
+    "climate", "lock", "number", "select", "button", "fan", "camera", "event",
+];
 
 /// Top-level and availability-item abbreviations (subset of HA's table
 /// covering what ESPHome, Shelly, Tasmota, zigbee2mqtt and WLED emit).
@@ -87,7 +89,10 @@ fn expand_keys(map: Map<String, Json>, table: &[(&str, &str)]) -> Map<String, Js
 fn expand(mut map: Map<String, Json>) -> Map<String, Json> {
     map = expand_keys(map, ABBREVIATIONS);
     if let Some(Json::Object(dev)) = map.remove("device") {
-        map.insert("device".into(), Json::Object(expand_keys(dev, DEVICE_ABBREVIATIONS)));
+        map.insert(
+            "device".into(),
+            Json::Object(expand_keys(dev, DEVICE_ABBREVIATIONS)),
+        );
     }
     if let Some(Json::Array(items)) = map.remove("availability") {
         let items = items
@@ -104,11 +109,16 @@ fn expand(mut map: Map<String, Json>) -> Map<String, Json> {
 
 #[derive(Debug)]
 pub enum Outcome {
-    Upsert { device: Box<Device>, entity: Box<Entity> },
+    Upsert {
+        device: Box<Device>,
+        entity: Box<Entity>,
+    },
     /// Empty retained payload = deletion, per HA convention. The registry
     /// resolves which entity via its config-topic index.
     Remove,
-    Quarantine { reason: String },
+    Quarantine {
+        reason: String,
+    },
     /// Not a discovery config topic at all.
     NotDiscovery,
 }
@@ -137,15 +147,23 @@ pub fn handle(topic: &str, payload: &[u8]) -> Outcome {
 
     let deferred = DEFERRED.contains(&component.as_str());
     if !SUPPORTED.contains(&component.as_str()) && !deferred {
-        return Outcome::Quarantine { reason: format!("unknown component '{component}'") };
+        return Outcome::Quarantine {
+            reason: format!("unknown component '{component}'"),
+        };
     }
 
     let json: Json = match serde_json::from_slice(payload) {
         Ok(j) => j,
-        Err(e) => return Outcome::Quarantine { reason: format!("unparseable JSON: {e}") },
+        Err(e) => {
+            return Outcome::Quarantine {
+                reason: format!("unparseable JSON: {e}"),
+            };
+        }
     };
     let Json::Object(map) = json else {
-        return Outcome::Quarantine { reason: "payload is not a JSON object".into() };
+        return Outcome::Quarantine {
+            reason: "payload is not a JSON object".into(),
+        };
     };
     let map = expand(map);
 
@@ -153,7 +171,9 @@ pub fn handle(topic: &str, payload: &[u8]) -> Outcome {
 
     // unique_id is required; without it there is no stable identity (spec rule).
     let Some(unique_id) = str_of("unique_id") else {
-        return Outcome::Quarantine { reason: "missing unique_id".into() };
+        return Outcome::Quarantine {
+            reason: "missing unique_id".into(),
+        };
     };
 
     let template = match str_of("value_template") {
@@ -162,8 +182,10 @@ pub fn handle(topic: &str, payload: &[u8]) -> Outcome {
             Some(parsed) => Some(parsed),
             None => {
                 return Outcome::Quarantine {
-                    reason: format!("unsupported value_template '{t}' (only '{{{{ value }}}}' and '{{{{ value_json.<path> }}}}' are evaluated)"),
-                }
+                    reason: format!(
+                        "unsupported value_template '{t}' (only '{{{{ value }}}}' and '{{{{ value_json.<path> }}}}' are evaluated)"
+                    ),
+                };
             }
         },
     };
@@ -181,7 +203,11 @@ pub fn handle(topic: &str, payload: &[u8]) -> Outcome {
     let device = match map.get("device").and_then(Json::as_object) {
         Some(dev) => {
             let identifiers: Vec<String> = match dev.get("identifiers") {
-                Some(Json::Array(a)) => a.iter().filter_map(Json::as_str).map(str::to_string).collect(),
+                Some(Json::Array(a)) => a
+                    .iter()
+                    .filter_map(Json::as_str)
+                    .map(str::to_string)
+                    .collect(),
                 Some(Json::String(s)) => vec![s.clone()],
                 _ => vec![],
             };
@@ -229,27 +255,29 @@ pub fn handle(topic: &str, payload: &[u8]) -> Outcome {
         availability.push(Availability {
             topic: t,
             payload_available: str_of("payload_available").unwrap_or_else(|| "online".into()),
-            payload_not_available: str_of("payload_not_available").unwrap_or_else(|| "offline".into()),
+            payload_not_available: str_of("payload_not_available")
+                .unwrap_or_else(|| "offline".into()),
         });
     }
     if let Some(Json::Array(items)) = map.get("availability") {
         for item in items {
             if let Some(o) = item.as_object()
-                && let Some(t) = o.get("topic").and_then(Json::as_str) {
-                    availability.push(Availability {
-                        topic: t.to_string(),
-                        payload_available: o
-                            .get("payload_available")
-                            .and_then(Json::as_str)
-                            .unwrap_or("online")
-                            .to_string(),
-                        payload_not_available: o
-                            .get("payload_not_available")
-                            .and_then(Json::as_str)
-                            .unwrap_or("offline")
-                            .to_string(),
-                    });
-                }
+                && let Some(t) = o.get("topic").and_then(Json::as_str)
+            {
+                availability.push(Availability {
+                    topic: t.to_string(),
+                    payload_available: o
+                        .get("payload_available")
+                        .and_then(Json::as_str)
+                        .unwrap_or("online")
+                        .to_string(),
+                    payload_not_available: o
+                        .get("payload_not_available")
+                        .and_then(Json::as_str)
+                        .unwrap_or("offline")
+                        .to_string(),
+                });
+            }
         }
     }
 
@@ -267,7 +295,10 @@ pub fn handle(topic: &str, payload: &[u8]) -> Outcome {
             if str_of("schema").as_deref() == Some("json") {
                 Some(CommandCfg::Light(LightCmd::Json {
                     command_topic: ct,
-                    brightness: map.get("brightness").and_then(Json::as_bool).unwrap_or(false),
+                    brightness: map
+                        .get("brightness")
+                        .and_then(Json::as_bool)
+                        .unwrap_or(false),
                 }))
             } else if str_of("schema").is_none() {
                 Some(CommandCfg::Light(LightCmd::Basic {
@@ -282,7 +313,10 @@ pub fn handle(topic: &str, payload: &[u8]) -> Outcome {
                 }))
             } else {
                 return Outcome::Quarantine {
-                    reason: format!("unsupported light schema '{}'", str_of("schema").unwrap_or_default()),
+                    reason: format!(
+                        "unsupported light schema '{}'",
+                        str_of("schema").unwrap_or_default()
+                    ),
                 };
             }
         }
@@ -309,7 +343,10 @@ pub fn handle(topic: &str, payload: &[u8]) -> Outcome {
         id: sanitize_id(&unique_id),
         unique_id,
         device_id: device.id.clone(),
-        subsystem: suggest_subsystem(device_class.as_deref(), str_of("unit_of_measurement").as_deref()),
+        subsystem: suggest_subsystem(
+            device_class.as_deref(),
+            str_of("unit_of_measurement").as_deref(),
+        ),
         kind: kind.clone(),
         name: str_of("name").unwrap_or_else(|| fallback_object.clone()),
         unit: str_of("unit_of_measurement"),
@@ -329,13 +366,19 @@ pub fn handle(topic: &str, payload: &[u8]) -> Outcome {
         brightness_state_topic: str_of("brightness_state_topic"),
         availability,
         command,
-        optimistic: map.get("optimistic").and_then(Json::as_bool).unwrap_or(false),
+        optimistic: map
+            .get("optimistic")
+            .and_then(Json::as_bool)
+            .unwrap_or(false),
         state: None,
         available: None,
         attributes: Default::default(),
     };
 
-    Outcome::Upsert { device: Box::new(device), entity: Box::new(entity) }
+    Outcome::Upsert {
+        device: Box::new(device),
+        entity: Box::new(entity),
+    }
 }
 
 /// First-pass subsystem suggestion from HA vocabulary. User-overridable.
@@ -373,8 +416,13 @@ mod tests {
 
     #[test]
     fn ingests_abbreviated_sensor() {
-        let out = handle("homeassistant/sensor/shelly3em-aabb/power-a/config", SHELLY_LIKE.as_bytes());
-        let Outcome::Upsert { device, entity } = out else { panic!("expected upsert, got {out:?}") };
+        let out = handle(
+            "homeassistant/sensor/shelly3em-aabb/power-a/config",
+            SHELLY_LIKE.as_bytes(),
+        );
+        let Outcome::Upsert { device, entity } = out else {
+            panic!("expected upsert, got {out:?}")
+        };
         assert_eq!(device.id, "shelly3em-aabb");
         assert_eq!(device.manufacturer.as_deref(), Some("Shelly"));
         assert_eq!(entity.id, "shelly3em-aabb-power-a");
@@ -399,7 +447,10 @@ mod tests {
     fn unknown_component_quarantines_and_junk_ignored() {
         let out = handle("homeassistant/vacuum/x/config", br#"{"uniq_id":"v1"}"#);
         assert!(matches!(out, Outcome::Quarantine { .. }));
-        assert!(matches!(handle("shellies/em/0/power", b"42"), Outcome::NotDiscovery));
+        assert!(matches!(
+            handle("shellies/em/0/power", b"42"),
+            Outcome::NotDiscovery
+        ));
     }
 
     #[test]
@@ -408,7 +459,9 @@ mod tests {
             "homeassistant/climate/x/config",
             br#"{"uniq_id":"heater1","name":"Heater","dev":{"ids":["h1"]}}"#,
         );
-        let Outcome::Upsert { entity, .. } = out else { panic!() };
+        let Outcome::Upsert { entity, .. } = out else {
+            panic!()
+        };
         assert_eq!(entity.kind, EntityKind::Deferred("climate".into()));
         assert!(entity.command.is_none());
     }
@@ -424,7 +477,10 @@ mod tests {
 
     #[test]
     fn empty_payload_removes() {
-        assert!(matches!(handle("homeassistant/sensor/x/config", b""), Outcome::Remove));
+        assert!(matches!(
+            handle("homeassistant/sensor/x/config", b""),
+            Outcome::Remove
+        ));
     }
 
     #[test]
@@ -433,7 +489,9 @@ mod tests {
             "homeassistant/switch/x/config",
             br#"{"uniq_id":"sw1","stat_t":"n/sw/state","cmd_t":"n/sw/cmd","dev":{"ids":["n1"]}}"#,
         );
-        let Outcome::Upsert { entity, .. } = out else { panic!() };
+        let Outcome::Upsert { entity, .. } = out else {
+            panic!()
+        };
         assert_eq!(
             entity.command,
             Some(CommandCfg::Switch {

@@ -7,10 +7,12 @@ description = "Vanifold hub daemon: MQTT ingestion, entity registry, API, histor
 
 [dependencies]
 axum = { version = "0.8.9", features = ["ws"] }
+mime_guess = { version = "2.0.5", optional = true }
 # default-features = false drops rustls/aws-lc (TLS is deferred per docs/mqtt-conventions.md);
 # saves cmake + a C toolchain-heavy build on the Pi
 rumqttc = { version = "0.25.1", default-features = false }
 rusqlite = { version = "0.37", features = ["bundled"] }
+rust-embed = { version = "8.12.0", optional = true }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 tokio = { version = "1.52.3", features = ["full"] }
@@ -18,3 +20,8 @@ toml = "1.1.2"
 tower-http = { version = "0.7.0", features = ["fs"] }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
+
+[features]
+# Compile the built UI (ui/build) into the binary. Release builds use this;
+# dev builds serve from disk via api.ui_dir instead.
+embed-ui = ["dep:rust-embed", "dep:mime_guess"]

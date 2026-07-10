@@ -20,7 +20,13 @@ pub fn sanitize_id(raw: &str) -> String {
     let mut out: String = raw
         .to_lowercase()
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if out.is_empty() {
         out.push('_');
@@ -105,7 +111,10 @@ impl Template {
             return None;
         }
         let segments: Vec<String> = path.split('.').map(str::to_string).collect();
-        if segments.iter().any(|s| s.is_empty() || !s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')) {
+        if segments
+            .iter()
+            .any(|s| s.is_empty() || !s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        {
             return None;
         }
         Some(Template::JsonPath(segments))
@@ -156,7 +165,10 @@ pub enum LightCmd {
         brightness_scale: u32,
     },
     /// HA "json" schema: one topic, JSON body.
-    Json { command_topic: String, brightness: bool },
+    Json {
+        command_topic: String,
+        brightness: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -396,11 +408,23 @@ mod tests {
         let now = now_ms();
         let mut e = sensor();
         assert_eq!(e.quality(now, 900_000), Quality::Stale); // never heard
-        e.state = Some(State { value: Value::Number(1.0), updated_at: now, retained: true });
+        e.state = Some(State {
+            value: Value::Number(1.0),
+            updated_at: now,
+            retained: true,
+        });
         assert_eq!(e.quality(now, 900_000), Quality::Retained);
-        e.state = Some(State { value: Value::Number(1.0), updated_at: now, retained: false });
+        e.state = Some(State {
+            value: Value::Number(1.0),
+            updated_at: now,
+            retained: false,
+        });
         assert_eq!(e.quality(now, 900_000), Quality::Live);
-        e.state = Some(State { value: Value::Number(1.0), updated_at: now - 1_000_000, retained: false });
+        e.state = Some(State {
+            value: Value::Number(1.0),
+            updated_at: now - 1_000_000,
+            retained: false,
+        });
         assert_eq!(e.quality(now, 900_000), Quality::Stale);
         e.available = Some(false);
         assert_eq!(e.quality(now, 900_000), Quality::Unavailable);

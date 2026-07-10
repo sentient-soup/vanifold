@@ -4,8 +4,8 @@
 
 use crate::config::MqttConfig;
 use crate::registry::Registry;
-use rumqttc::v5::mqttbytes::v5::{LastWill, Packet, PublishProperties};
 use rumqttc::v5::mqttbytes::QoS;
+use rumqttc::v5::mqttbytes::v5::{LastWill, Packet, PublishProperties};
 use rumqttc::v5::{AsyncClient, Event, MqttOptions};
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,13 +20,23 @@ pub struct CommandPublish {
     pub payload: String,
 }
 
-pub async fn run(cfg: MqttConfig, registry: Arc<Registry>, mut commands: mpsc::Receiver<CommandPublish>) {
+pub async fn run(
+    cfg: MqttConfig,
+    registry: Arc<Registry>,
+    mut commands: mpsc::Receiver<CommandPublish>,
+) {
     let mut options = MqttOptions::new(cfg.client_id.clone(), cfg.host.clone(), cfg.port);
     options.set_keep_alive(Duration::from_secs(30));
     if let (Some(u), Some(p)) = (&cfg.username, &cfg.password) {
         options.set_credentials(u.clone(), p.clone());
     }
-    options.set_last_will(LastWill::new(STATUS_TOPIC, "offline", QoS::AtLeastOnce, true, None));
+    options.set_last_will(LastWill::new(
+        STATUS_TOPIC,
+        "offline",
+        QoS::AtLeastOnce,
+        true,
+        None,
+    ));
 
     let (client, mut eventloop) = AsyncClient::new(options, 256);
 
@@ -64,12 +74,10 @@ pub async fn run(cfg: MqttConfig, registry: Arc<Registry>, mut commands: mpsc::R
                     tracing::error!(%e, "status publish failed");
                 }
             }
-            Ok(Event::Incoming(Packet::Publish(p))) => {
-                match std::str::from_utf8(&p.topic) {
-                    Ok(topic) => registry.handle_publish(topic, &p.payload, p.retain),
-                    Err(_) => tracing::debug!("ignoring publish with non-utf8 topic"),
-                }
-            }
+            Ok(Event::Incoming(Packet::Publish(p))) => match std::str::from_utf8(&p.topic) {
+                Ok(topic) => registry.handle_publish(topic, &p.payload, p.retain),
+                Err(_) => tracing::debug!("ignoring publish with non-utf8 topic"),
+            },
             Ok(_) => {}
             Err(e) => {
                 tracing::warn!(%e, "mqtt connection error, retrying in 3s");

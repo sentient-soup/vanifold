@@ -1,28 +1,38 @@
 #!/usr/bin/env bash
-# Bootstrap a headless Raspberry Pi OS (Debian) machine into a vanifold hub:
-# Mosquitto broker with credentials, vanifold-core built from source, systemd
-# service, and an end-to-end discovery smoke test.
+# Install or update a vanifold hub on Debian-family Linux (Raspberry Pi OS).
+# Sets up the Mosquitto broker, installs the vanifold-core binary (UI
+# embedded), a systemd service, and runs an end-to-end smoke test.
 #
-# Usage:  curl -fsSL https://raw.githubusercontent.com/sentient-soup/vanifold/main/scripts/bootstrap-pi.sh | sudo bash
-#    or:  sudo ./bootstrap-pi.sh
+# Install/update from the latest GitHub release (no toolchain needed):
+#   curl -fsSL https://raw.githubusercontent.com/sentient-soup/vanifold/main/scripts/install.sh | sudo bash
+#
+# Pin a version:
+#   ... | sudo VANIFOLD_VERSION=v0.1.0 bash
+#
+# Build from source instead (the one-stop dev loop: pulls, rebuilds whatever
+# changed, reinstalls, restarts):
+#   sudo ./scripts/install.sh --source
 #
 # Idempotent: safe to re-run; existing passwords and data are kept.
 set -euo pipefail
 
-REPO_URL="https://github.com/sentient-soup/vanifold.git"
+REPO="sentient-soup/vanifold"
 SRC_DIR="/opt/vanifold/src"
 CONF_DIR="/etc/vanifold"
 DATA_DIR="/var/lib/vanifold"
+BIN=/usr/local/bin/vanifold-core
 API_PORT=8480
+
+FROM_SOURCE=0
+[ "${1:-}" = "--source" ] && FROM_SOURCE=1
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root (sudo)"; exit 1; }
 
-echo "==> [1/6] apt packages (build tools, mosquitto)"
+echo "==> [1/5] apt packages"
 apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-    git build-essential pkg-config curl mosquitto mosquitto-clients
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl mosquitto mosquitto-clients
 
-echo "==> [2/6] MQTT credentials + broker config"
+echo "==> [2/5] MQTT credentials + broker config"
 # Two principals per docs/mqtt-conventions.md: the core, and one shared
 # device/node identity. Passwords generated once, kept on re-run.
 mkdir -p "$CONF_DIR"
@@ -57,23 +67,61 @@ EOF
 systemctl enable --now mosquitto
 systemctl restart mosquitto
 
-echo "==> [3/6] Rust toolchain (skipped if present)"
-if ! command -v cargo >/dev/null 2>&1 && [ ! -x "$HOME/.cargo/bin/cargo" ]; then
-    curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal -q
-fi
-export PATH="$HOME/.cargo/bin:$PATH"
-
-echo "==> [4/6] Build vanifold-core (first build takes 10-20 min on a Pi 4)"
-mkdir -p "$(dirname "$SRC_DIR")"
-if [ -d "$SRC_DIR/.git" ]; then
-    git -C "$SRC_DIR" pull --ff-only
+if [ "$FROM_SOURCE" = 1 ]; then
+    echo "==> [3/5] Build from source"
+    command -v git >/dev/null || apt-get install -y -qq git build-essential pkg-config
+    export PATH="$HOME/.cargo/bin:$PATH"
+    if ! command -v cargo >/dev/null; then
+        echo "    installing Rust toolchain..."
+        curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal -q
+    fi
+    if ! command -v npm >/dev/null; then
+        echo "node/npm not found. Install Node 20+ first, e.g.:" >&2
+        echo "  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - && sudo apt-get install -y nodejs" >&2
+        exit 1
+    fi
+    if [ -d "$SRC_DIR/.git" ]; then
+        git -C "$SRC_DIR" pull --ff-only
+    else
+        mkdir -p "$(dirname "$SRC_DIR")"
+        git clone --depth 1 "https://github.com/$REPO.git" "$SRC_DIR"
+    fi
+    npm install --prefix "$SRC_DIR/ui" --no-fund --no-audit
+    npm run build --prefix "$SRC_DIR/ui"
+    cargo build --release -p vanifold-core --features embed-ui \
+        --manifest-path "$SRC_DIR/Cargo.toml"
+    install -m 755 "$SRC_DIR/target/release/vanifold-core" "$BIN"
 else
-    git clone --depth 1 "$REPO_URL" "$SRC_DIR"
+    echo "==> [3/5] Install release binary"
+    case "$(uname -m)" in
+        aarch64) TARGET=aarch64-unknown-linux-gnu ;;
+        armv7l)  TARGET=armv7-unknown-linux-gnueabihf ;;
+        x86_64)  TARGET=x86_64-unknown-linux-gnu ;;
+        *) echo "unsupported architecture $(uname -m); try --source" >&2; exit 1 ;;
+    esac
+    VERSION="${VANIFOLD_VERSION:-}"
+    if [ -z "$VERSION" ]; then
+        VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+            "https://github.com/$REPO/releases/latest" | sed 's#.*/tag/##')
+    fi
+    if [ -z "$VERSION" ] || [ "${VERSION#v}" = "$VERSION" ]; then
+        echo "could not resolve a release version (no releases yet?); try --source" >&2
+        exit 1
+    fi
+    NAME="vanifold-$VERSION-$TARGET"
+    URL="https://github.com/$REPO/releases/download/$VERSION/$NAME.tar.gz"
+    TMP=$(mktemp -d)
+    trap 'rm -rf "$TMP"' EXIT
+    echo "    fetching $NAME ..."
+    curl -fsSL -o "$TMP/$NAME.tar.gz" "$URL"
+    curl -fsSL -o "$TMP/$NAME.tar.gz.sha256" "$URL.sha256"
+    (cd "$TMP" && sha256sum -c "$NAME.tar.gz.sha256" >/dev/null)
+    tar -xzf "$TMP/$NAME.tar.gz" -C "$TMP"
+    install -m 755 "$TMP/$NAME/vanifold-core" "$BIN"
+    echo "    installed $VERSION"
 fi
-cargo build --release --manifest-path "$SRC_DIR/core/Cargo.toml"
-install -m 755 "$SRC_DIR/core/target/release/vanifold-core" /usr/local/bin/vanifold-core
 
-echo "==> [5/6] vanifold service"
+echo "==> [4/5] vanifold service"
 id -u vanifold >/dev/null 2>&1 || useradd --system --home "$DATA_DIR" --shell /usr/sbin/nologin vanifold
 mkdir -p "$DATA_DIR"
 chown vanifold:vanifold "$DATA_DIR"
@@ -107,7 +155,7 @@ Wants=mosquitto.service
 [Service]
 User=vanifold
 Group=vanifold
-ExecStart=/usr/local/bin/vanifold-core $CONF_DIR/vanifold.toml
+ExecStart=$BIN $CONF_DIR/vanifold.toml
 WorkingDirectory=$DATA_DIR
 Restart=always
 RestartSec=3
@@ -119,7 +167,7 @@ systemctl daemon-reload
 systemctl enable vanifold
 systemctl restart vanifold
 
-echo "==> [6/6] Smoke test: fake device announces itself over HA discovery"
+echo "==> [5/5] Smoke test: fake device announces itself over HA discovery"
 sleep 3
 TEST_TOPIC="homeassistant/sensor/bootstrap-test/config"
 mosquitto_pub -u "$NODE_USER" -P "$NODE_PASS" -r -t "$TEST_TOPIC" \
@@ -146,8 +194,8 @@ cat <<EOF
 
 vanifold hub is up.
 
+  Dashboard:  http://$IP:$API_PORT/
   API:        http://$IP:$API_PORT/api/entities
-  Live WS:    ws://$IP:$API_PORT/api/ws
   Logs:       journalctl -u vanifold -f
 
 Device MQTT credentials (for ESPHome/Shelly/zigbee2mqtt configs):
@@ -155,5 +203,5 @@ Device MQTT credentials (for ESPHome/Shelly/zigbee2mqtt configs):
   username: $NODE_USER
   password: $NODE_PASS
 
-To update later: re-run this script (it pulls and rebuilds).
+To update: re-run this script.
 EOF

@@ -8,19 +8,33 @@ use crate::model::*;
 use crate::store::StoreMsg;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::mpsc::Sender as StoreTx;
 use std::sync::RwLock;
+use std::sync::mpsc::Sender as StoreTx;
 use tokio::sync::broadcast;
 
 /// Events broadcast to API subscribers (and mirrored to the store where relevant).
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
-    EntityUpserted { entity: Box<Entity> },
-    EntityRemoved { entity_id: EntityId },
-    StateChanged { entity_id: EntityId, state: State },
-    AvailabilityChanged { entity_id: EntityId, available: bool },
-    AttributeChanged { entity_id: EntityId, key: String, value: serde_json::Value },
+    EntityUpserted {
+        entity: Box<Entity>,
+    },
+    EntityRemoved {
+        entity_id: EntityId,
+    },
+    StateChanged {
+        entity_id: EntityId,
+        state: State,
+    },
+    AvailabilityChanged {
+        entity_id: EntityId,
+        available: bool,
+    },
+    AttributeChanged {
+        entity_id: EntityId,
+        key: String,
+        value: serde_json::Value,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -69,7 +83,11 @@ fn unindex(map: &mut HashMap<String, Vec<EntityId>>, id: &str) {
 impl Registry {
     pub fn new(store: StoreTx<StoreMsg>) -> Self {
         let (events, _) = broadcast::channel(256);
-        Registry { inner: RwLock::new(Inner::default()), events, store }
+        Registry {
+            inner: RwLock::new(Inner::default()),
+            events,
+            store,
+        }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Event> {
@@ -115,7 +133,11 @@ impl Registry {
                     ts: now_ms(),
                 };
                 self.store.send(StoreMsg::Quarantine(item.clone())).ok();
-                self.inner.write().unwrap().quarantine.insert(topic.to_string(), item);
+                self.inner
+                    .write()
+                    .unwrap()
+                    .quarantine
+                    .insert(topic.to_string(), item);
             }
         }
     }
@@ -145,22 +167,36 @@ impl Registry {
             let t = t.clone();
             index(&mut inner.by_brightness_topic, &t, &entity.id);
         }
-        inner.by_config_topic.insert(config_topic.to_string(), entity.id.clone());
+        inner
+            .by_config_topic
+            .insert(config_topic.to_string(), entity.id.clone());
         inner.quarantine.remove(config_topic); // a good payload heals a quarantined topic
         inner.devices.insert(device.id.clone(), device.clone());
         inner.entities.insert(entity.id.clone(), entity.clone());
         drop(inner);
 
         tracing::info!(entity = %entity.id, device = %device.id, "entity upserted");
-        self.store.send(StoreMsg::UpsertDevice(Box::new(device))).ok();
-        self.store.send(StoreMsg::UpsertEntity(Box::new(entity.clone()))).ok();
-        self.store.send(StoreMsg::RemoveQuarantine(config_topic.to_string())).ok();
-        self.events.send(Event::EntityUpserted { entity: Box::new(entity) }).ok();
+        self.store
+            .send(StoreMsg::UpsertDevice(Box::new(device)))
+            .ok();
+        self.store
+            .send(StoreMsg::UpsertEntity(Box::new(entity.clone())))
+            .ok();
+        self.store
+            .send(StoreMsg::RemoveQuarantine(config_topic.to_string()))
+            .ok();
+        self.events
+            .send(Event::EntityUpserted {
+                entity: Box::new(entity),
+            })
+            .ok();
     }
 
     fn remove_by_config_topic(&self, config_topic: &str) {
         let mut inner = self.inner.write().unwrap();
-        let Some(id) = inner.by_config_topic.remove(config_topic) else { return };
+        let Some(id) = inner.by_config_topic.remove(config_topic) else {
+            return;
+        };
         inner.entities.remove(&id);
         unindex(&mut inner.by_state_topic, &id);
         unindex(&mut inner.by_avail_topic, &id);
@@ -168,7 +204,9 @@ impl Registry {
         drop(inner);
         tracing::info!(entity = %id, "entity removed (empty discovery payload)");
         self.store.send(StoreMsg::RemoveEntity(id.clone())).ok();
-        self.events.send(Event::EntityRemoved { entity_id: id }).ok();
+        self.events
+            .send(Event::EntityRemoved { entity_id: id })
+            .ok();
     }
 
     fn handle_state(&self, topic: &str, payload: &[u8], retained: bool) {
@@ -181,7 +219,11 @@ impl Registry {
             if let Some(e) = inner.entities.get_mut(&id) {
                 match e.interpret(&payload) {
                     Some(value) => {
-                        let state = State { value, updated_at: now_ms(), retained };
+                        let state = State {
+                            value,
+                            updated_at: now_ms(),
+                            retained,
+                        };
                         e.state = Some(state.clone());
                         if let Some(v) = state.value.history_point() {
                             store_msgs.push(StoreMsg::Point {
@@ -190,7 +232,10 @@ impl Registry {
                                 value: v,
                             });
                         }
-                        events.push(Event::StateChanged { entity_id: id, state });
+                        events.push(Event::StateChanged {
+                            entity_id: id,
+                            state,
+                        });
                     }
                     None => {
                         tracing::debug!(entity = %id, topic, %payload, "state payload did not interpret");
@@ -213,19 +258,33 @@ impl Registry {
                     }
                 });
                 if let Some(avail) = avail
-                    && e.available != Some(avail) {
-                        e.available = Some(avail);
-                        events.push(Event::AvailabilityChanged { entity_id: id, available: avail });
-                    }
+                    && e.available != Some(avail)
+                {
+                    e.available = Some(avail);
+                    events.push(Event::AvailabilityChanged {
+                        entity_id: id,
+                        available: avail,
+                    });
+                }
             }
         }
-        for id in inner.by_brightness_topic.get(topic).cloned().unwrap_or_default() {
+        for id in inner
+            .by_brightness_topic
+            .get(topic)
+            .cloned()
+            .unwrap_or_default()
+        {
             if let Some(e) = inner.entities.get_mut(&id)
-                && let Ok(b) = payload.trim().parse::<u64>() {
-                    let v = serde_json::json!(b);
-                    e.attributes.insert("brightness".into(), v.clone());
-                    events.push(Event::AttributeChanged { entity_id: id, key: "brightness".into(), value: v });
-                }
+                && let Ok(b) = payload.trim().parse::<u64>()
+            {
+                let v = serde_json::json!(b);
+                e.attributes.insert("brightness".into(), v.clone());
+                events.push(Event::AttributeChanged {
+                    entity_id: id,
+                    key: "brightness".into(),
+                    value: v,
+                });
+            }
         }
         drop(inner);
 
@@ -239,32 +298,75 @@ impl Registry {
 
     /// Validate a command and produce the MQTT publishes it maps to.
     /// Never publishes retained; expiry is applied at the MQTT layer.
-    pub fn command(&self, entity_id: &str, cmd: &Command) -> Result<Vec<(String, String)>, interlock::Rejection> {
+    pub fn command(
+        &self,
+        entity_id: &str,
+        cmd: &Command,
+    ) -> Result<Vec<(String, String)>, interlock::Rejection> {
         let inner = self.inner.read().unwrap();
         let Some(entity) = inner.entities.get(entity_id) else {
-            return Err(interlock::Rejection { reason: format!("unknown entity '{entity_id}'") });
+            return Err(interlock::Rejection {
+                reason: format!("unknown entity '{entity_id}'"),
+            });
         };
         interlock::check(entity, cmd)?;
         let unsupported = || interlock::Rejection {
-            reason: format!("entity '{entity_id}' ({:?}) does not support {cmd:?}", entity.kind),
+            reason: format!(
+                "entity '{entity_id}' ({:?}) does not support {cmd:?}",
+                entity.kind
+            ),
         };
-        let Some(cfg) = &entity.command else { return Err(unsupported()) };
+        let Some(cfg) = &entity.command else {
+            return Err(unsupported());
+        };
 
         let publishes = match (cfg, cmd) {
-            (CommandCfg::Switch { command_topic, payload_on, .. }, Command::TurnOn) => {
+            (
+                CommandCfg::Switch {
+                    command_topic,
+                    payload_on,
+                    ..
+                },
+                Command::TurnOn,
+            ) => {
                 vec![(command_topic.clone(), payload_on.clone())]
             }
-            (CommandCfg::Switch { command_topic, payload_off, .. }, Command::TurnOff) => {
-                vec![(command_topic.clone(), payload_off.clone())]
-            }
-            (CommandCfg::Light(LightCmd::Basic { command_topic, payload_on, .. }), Command::TurnOn) => {
-                vec![(command_topic.clone(), payload_on.clone())]
-            }
-            (CommandCfg::Light(LightCmd::Basic { command_topic, payload_off, .. }), Command::TurnOff) => {
+            (
+                CommandCfg::Switch {
+                    command_topic,
+                    payload_off,
+                    ..
+                },
+                Command::TurnOff,
+            ) => {
                 vec![(command_topic.clone(), payload_off.clone())]
             }
             (
-                CommandCfg::Light(LightCmd::Basic { brightness_command_topic: Some(bt), brightness_scale, .. }),
+                CommandCfg::Light(LightCmd::Basic {
+                    command_topic,
+                    payload_on,
+                    ..
+                }),
+                Command::TurnOn,
+            ) => {
+                vec![(command_topic.clone(), payload_on.clone())]
+            }
+            (
+                CommandCfg::Light(LightCmd::Basic {
+                    command_topic,
+                    payload_off,
+                    ..
+                }),
+                Command::TurnOff,
+            ) => {
+                vec![(command_topic.clone(), payload_off.clone())]
+            }
+            (
+                CommandCfg::Light(LightCmd::Basic {
+                    brightness_command_topic: Some(bt),
+                    brightness_scale,
+                    ..
+                }),
                 Command::SetBrightness { brightness },
             ) => {
                 let scaled = (*brightness as u32 * brightness_scale / 255).max(1);
@@ -276,19 +378,55 @@ impl Registry {
             (CommandCfg::Light(LightCmd::Json { command_topic, .. }), Command::TurnOff) => {
                 vec![(command_topic.clone(), r#"{"state":"OFF"}"#.into())]
             }
-            (CommandCfg::Light(LightCmd::Json { command_topic, brightness: true }), Command::SetBrightness { brightness }) => {
-                vec![(command_topic.clone(), format!(r#"{{"state":"ON","brightness":{brightness}}}"#))]
+            (
+                CommandCfg::Light(LightCmd::Json {
+                    command_topic,
+                    brightness: true,
+                }),
+                Command::SetBrightness { brightness },
+            ) => {
+                vec![(
+                    command_topic.clone(),
+                    format!(r#"{{"state":"ON","brightness":{brightness}}}"#),
+                )]
             }
-            (CommandCfg::Cover { command_topic, payload_open, .. }, Command::Open) => {
+            (
+                CommandCfg::Cover {
+                    command_topic,
+                    payload_open,
+                    ..
+                },
+                Command::Open,
+            ) => {
                 vec![(command_topic.clone(), payload_open.clone())]
             }
-            (CommandCfg::Cover { command_topic, payload_close, .. }, Command::Close) => {
+            (
+                CommandCfg::Cover {
+                    command_topic,
+                    payload_close,
+                    ..
+                },
+                Command::Close,
+            ) => {
                 vec![(command_topic.clone(), payload_close.clone())]
             }
-            (CommandCfg::Cover { command_topic, payload_stop, .. }, Command::Stop) => {
+            (
+                CommandCfg::Cover {
+                    command_topic,
+                    payload_stop,
+                    ..
+                },
+                Command::Stop,
+            ) => {
                 vec![(command_topic.clone(), payload_stop.clone())]
             }
-            (CommandCfg::Cover { set_position_topic: Some(pt), .. }, Command::SetPosition { position }) => {
+            (
+                CommandCfg::Cover {
+                    set_position_topic: Some(pt),
+                    ..
+                },
+                Command::SetPosition { position },
+            ) => {
                 vec![(pt.clone(), position.to_string())]
             }
             _ => return Err(unsupported()),
@@ -389,7 +527,8 @@ mod tests {
         let (r, rx) = registry();
         r.handle_publish(
             "homeassistant/sensor/t/config",
-            r#"{"uniq_id":"temp1","stat_t":"n1/temp","unit_of_meas":"°C","dev":{"ids":["n1"]}}"#.as_bytes(),
+            r#"{"uniq_id":"temp1","stat_t":"n1/temp","unit_of_meas":"°C","dev":{"ids":["n1"]}}"#
+                .as_bytes(),
             true,
         );
         r.handle_publish("n1/temp", b"21.5", false);

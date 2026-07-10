@@ -1,0 +1,91 @@
+name: Release
+
+# Tag-driven releases: push a tag `vX.Y.Z` (matching core/Cargo.toml version)
+# and this builds single-binary artifacts (UI embedded) for every supported
+# architecture, cross-compiled against an old glibc so they run on any
+# reasonably current Raspberry Pi OS / Debian, then publishes a GitHub Release
+# with checksums. scripts/install.sh consumes these artifacts.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - aarch64-unknown-linux-gnu # Pi 3/4/5, 64-bit OS
+          - armv7-unknown-linux-gnueabihf # Pi 2/3/4, 32-bit OS
+          - x86_64-unknown-linux-gnu # generic mini PCs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag must match crate version
+        run: |
+          V=$(grep -m1 '^version' core/Cargo.toml | cut -d'"' -f2)
+          if [ "v$V" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match core/Cargo.toml version $V" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Build UI
+        run: |
+          npm ci --prefix ui
+          npm run build --prefix ui
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build core (UI embedded)
+        run: cross build --release --locked -p vanifold-core --features embed-ui --target ${{ matrix.target }}
+
+      - name: Package
+        run: |
+          NAME="vanifold-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir -p "stage/$NAME"
+          cp "target/${{ matrix.target }}/release/vanifold-core" "stage/$NAME/"
+          cp README.md LICENSE-MIT LICENSE-APACHE "stage/$NAME/"
+          tar -czf "$NAME.tar.gz" -C stage "$NAME"
+          sha256sum "$NAME.tar.gz" > "$NAME.tar.gz.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: vanifold-*.tar.gz*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Verify and collect checksums
+        run: |
+          cd dist
+          sha256sum -c ./*.sha256
+          cat ./*.sha256 > SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          generate_release_notes: true

@@ -1,7 +1,7 @@
 //! HTTP/WebSocket API: the only egress in v0.1 (docs/mqtt-conventions.md).
 //! REST for snapshots and history, WebSocket for the live stream + commands.
 
-use crate::model::{now_ms, Command, Entity};
+use crate::model::{Command, Entity, now_ms};
 use crate::mqtt::CommandPublish;
 use crate::registry::Registry;
 use crate::store;
@@ -61,16 +61,47 @@ pub fn router(app: App, ui_dir: Option<PathBuf>) -> Router {
         .with_state(app);
     match ui_dir {
         // SPA: unknown paths fall back to index.html (adapter-static fallback build).
+        // A ui_dir on disk overrides the embedded build (dev convenience).
         Some(dir) => api.fallback_service(
             tower_http::services::ServeDir::new(&dir)
                 .not_found_service(tower_http::services::ServeFile::new(dir.join("index.html"))),
         ),
+        #[cfg(feature = "embed-ui")]
+        None => api.fallback(embedded::handler),
+        #[cfg(not(feature = "embed-ui"))]
         None => api.route("/", get(index)),
     }
 }
 
+#[cfg(not(feature = "embed-ui"))]
 async fn index() -> &'static str {
     "vanifold-core is running. API at /api, live stream at /api/ws. (No UI build found; set api.ui_dir or build ui/.)"
+}
+
+/// UI assets compiled into the binary (release builds): single-artifact deploys.
+#[cfg(feature = "embed-ui")]
+mod embedded {
+    use axum::http::{StatusCode, Uri, header};
+    use axum::response::{IntoResponse, Response};
+
+    #[derive(rust_embed::Embed)]
+    #[folder = "../ui/build"]
+    struct Assets;
+
+    pub async fn handler(uri: Uri) -> Response {
+        let path = uri.path().trim_start_matches('/');
+        let path = if path.is_empty() { "index.html" } else { path };
+        // SPA fallback: unknown paths get index.html.
+        let (path, file) = match Assets::get(path) {
+            Some(f) => (path, f),
+            None => match Assets::get("index.html") {
+                Some(f) => ("index.html", f),
+                None => return StatusCode::NOT_FOUND.into_response(),
+            },
+        };
+        let mime = mime_guess::from_path(path).first_or_octet_stream();
+        ([(header::CONTENT_TYPE, mime.as_ref())], file.data).into_response()
+    }
 }
 
 async fn entities(State(app): State<App>) -> Json<serde_json::Value> {
@@ -100,16 +131,25 @@ async fn history(
     let from = range.from.unwrap_or(now.saturating_sub(24 * 3600 * 1000));
     let to = range.to.unwrap_or(now);
     let path = app.db_path.clone();
-    let result = tokio::task::spawn_blocking(move || store::history(&path, &entity_id, from, to)).await;
+    let result =
+        tokio::task::spawn_blocking(move || store::history(&path, &entity_id, from, to)).await;
     match result {
         Ok(Ok(points)) => Json(serde_json::json!({ "points": points })).into_response(),
         Ok(Err(e)) => {
             tracing::error!(%e, "history query failed");
-            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "history query failed").into_response()
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "history query failed",
+            )
+                .into_response()
         }
         Err(e) => {
             tracing::error!(%e, "history task failed");
-            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "history task failed").into_response()
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "history task failed",
+            )
+                .into_response()
         }
     }
 }
@@ -134,7 +174,11 @@ async fn ws_upgrade(ws: WebSocketUpgrade, State(app): State<App>) -> Response {
 
 async fn ws_session(mut socket: WebSocket, app: App) {
     // Snapshot first so the client renders immediately, then the live stream.
-    if socket.send(Message::text(snapshot_json(&app).to_string())).await.is_err() {
+    if socket
+        .send(Message::text(snapshot_json(&app).to_string()))
+        .await
+        .is_err()
+    {
         return;
     }
     let mut events = app.registry.subscribe();
@@ -176,11 +220,20 @@ async fn ws_session(mut socket: WebSocket, app: App) {
 async fn handle_client_msg(app: &App, text: &str) -> serde_json::Value {
     let parsed: Result<ClientMsg, _> = serde_json::from_str(text);
     match parsed {
-        Ok(ClientMsg::Command { id, entity_id, command }) => {
+        Ok(ClientMsg::Command {
+            id,
+            entity_id,
+            command,
+        }) => {
             match app.registry.command(&entity_id, &command) {
                 Ok(publishes) => {
                     for (topic, payload) in publishes {
-                        if app.commands.send(CommandPublish { topic, payload }).await.is_err() {
+                        if app
+                            .commands
+                            .send(CommandPublish { topic, payload })
+                            .await
+                            .is_err()
+                        {
                             return serde_json::json!({
                                 "type": "result", "id": id, "ok": false,
                                 "reason": "command channel closed"
@@ -196,6 +249,8 @@ async fn handle_client_msg(app: &App, text: &str) -> serde_json::Value {
                 }),
             }
         }
-        Err(e) => serde_json::json!({ "type": "result", "ok": false, "reason": format!("bad message: {e}") }),
+        Err(e) => {
+            serde_json::json!({ "type": "result", "ok": false, "reason": format!("bad message: {e}") })
+        }
     }
 }

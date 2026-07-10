@@ -20,7 +20,10 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    tracing::info!(version = env!("CARGO_PKG_VERSION"), "vanifold-core starting");
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        "vanifold-core starting"
+    );
 
     // Store thread first; the registry persists through it.
     let (store_tx, _store_handle) = store::spawn(cfg.store.db_path.clone());
@@ -57,7 +60,12 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    let ui_dir = cfg.api.ui_dir.join("index.html").exists().then(|| cfg.api.ui_dir.clone());
+    let ui_dir = cfg
+        .api
+        .ui_dir
+        .join("index.html")
+        .exists()
+        .then(|| cfg.api.ui_dir.clone());
     match &ui_dir {
         Some(d) => tracing::info!(dir = %d.display(), "serving UI"),
         None => tracing::info!(dir = %cfg.api.ui_dir.display(), "no UI build found, API only"),

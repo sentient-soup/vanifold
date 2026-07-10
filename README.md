@@ -19,6 +19,30 @@ the idea.
   guards (Tier 1) and node-local control loops (Tier 2) keep the van safe and
   livable with the hub dead; the hub (Tier 3) only orchestrates.
 
+## Install
+
+On a Raspberry Pi (or any Debian-family box) - installs the broker, the hub
+binary for your architecture from the latest release, a systemd service, and
+runs an end-to-end smoke test:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sentient-soup/vanifold/main/scripts/install.sh | sudo bash
+```
+
+Re-run the same command to update. Pin a version with
+`VANIFOLD_VERSION=v0.1.0`, or build from source with
+`sudo ./scripts/install.sh --source` (needs Rust + Node 20+).
+
+## Develop
+
+- `scripts/build.sh` - one-stop local build: UI bundle + single release
+  binary with the UI embedded.
+- `npm run dev --prefix ui` - UI dev server with hot reload; point it at a
+  running hub with `VANIFOLD_API=http://vanhub.local:8480`.
+- Open the UI with `?demo` for a simulated van, no hardware needed.
+- Releases are tag-driven: bump `core/Cargo.toml`, tag `vX.Y.Z`, push the
+  tag; CI cross-compiles aarch64/armv7/x86_64 artifacts and publishes them.
+
 ## Layout
 
 | Path | What |
