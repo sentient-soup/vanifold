@@ -7,7 +7,9 @@ description = "Vanifold hub daemon: MQTT ingestion, entity registry, API, histor
 
 [dependencies]
 axum = { version = "0.8.9", features = ["ws"] }
-rumqttc = "0.25.1"
+# default-features = false drops rustls/aws-lc (TLS is deferred per docs/mqtt-conventions.md);
+# saves cmake + a C toolchain-heavy build on the Pi
+rumqttc = { version = "0.25.1", default-features = false }
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
