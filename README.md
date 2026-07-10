@@ -40,6 +40,11 @@ Re-run the same command to update. Pin a version with
 - `npm run dev --prefix ui` - UI dev server with hot reload; point it at a
   running hub with `VANIFOLD_API=http://vanhub.local:8480`.
 - Open the UI with `?demo` for a simulated van, no hardware needed.
+- `cargo run -p vanifold-emulator` - virtual devices over **real MQTT**
+  (integration testing): announces a fleet via HA discovery against a local
+  broker, simulates physics, answers commands, drops a device offline
+  periodically, and feeds quarantine two broken payloads. Flags:
+  `--broker --port --username --password`.
 - Releases are tag-driven: bump `core/Cargo.toml`, tag `vX.Y.Z`, push the
   tag; CI cross-compiles aarch64/armv7/x86_64 artifacts and publishes them.
 
