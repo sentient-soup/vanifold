@@ -54,7 +54,10 @@ fn snapshot_json(app: &App) -> serde_json::Value {
 pub fn router(app: App, ui_dir: Option<PathBuf>) -> Router {
     let api = Router::new()
         .route("/api/entities", get(entities))
-        .route("/api/entities/{entity_id}", axum::routing::patch(update_entity))
+        .route(
+            "/api/entities/{entity_id}",
+            axum::routing::patch(update_entity),
+        )
         .route("/api/devices", get(devices))
         .route("/api/quarantine", get(quarantine))
         .route("/api/history/{entity_id}", get(history))
@@ -120,7 +123,8 @@ async fn update_entity(
             if let Some(obj) = v.as_object_mut() {
                 obj.insert(
                     "quality".into(),
-                    serde_json::to_value(e.quality(now_ms(), app.stale_after_ms)).unwrap_or_default(),
+                    serde_json::to_value(e.quality(now_ms(), app.stale_after_ms))
+                        .unwrap_or_default(),
                 );
             }
             Json(serde_json::json!({ "entity": v })).into_response()
