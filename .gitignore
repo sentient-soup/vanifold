@@ -6,6 +6,10 @@ node_modules/
 .svelte-kit/
 ui/build/
 
+# ESPHome
+nodes/secrets.yaml
+nodes/.esphome/
+
 # Runtime artifacts
 *.db
 *.db-wal
