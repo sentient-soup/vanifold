@@ -114,8 +114,10 @@ else
     trap 'rm -rf "$TMP"' EXIT
     echo "    fetching $NAME ..."
     curl -fsSL -o "$TMP/$NAME.tar.gz" "$URL"
-    curl -fsSL -o "$TMP/$NAME.tar.gz.sha256" "$URL.sha256"
-    (cd "$TMP" && sha256sum -c "$NAME.tar.gz.sha256" >/dev/null)
+    # the release publishes one combined SHA256SUMS, not per-file sidecars
+    curl -fsSL -o "$TMP/SHA256SUMS" \
+        "https://github.com/$REPO/releases/download/$VERSION/SHA256SUMS"
+    (cd "$TMP" && grep "  $NAME.tar.gz\$" SHA256SUMS | sha256sum -c - >/dev/null)
     tar -xzf "$TMP/$NAME.tar.gz" -C "$TMP"
     install -m 755 "$TMP/$NAME/vanifold-core" "$BIN"
     echo "    installed $VERSION"
