@@ -228,6 +228,23 @@ impl Registry {
             if let Some(e) = inner.entities.get_mut(&id) {
                 match e.interpret(&payload) {
                     Some(value) => {
+                        // JSON-schema lights carry brightness in the state
+                        // payload; basic lights use by_brightness_topic below.
+                        if e.kind == EntityKind::Light
+                            && let Some(b) = serde_json::from_str::<serde_json::Value>(&payload)
+                                .ok()
+                                .and_then(|v| v.get("brightness")?.as_u64())
+                        {
+                            let v = serde_json::json!(b);
+                            if e.attributes.get("brightness") != Some(&v) {
+                                e.attributes.insert("brightness".into(), v.clone());
+                                events.push(Event::AttributeChanged {
+                                    entity_id: id.clone(),
+                                    key: "brightness".into(),
+                                    value: v,
+                                });
+                            }
+                        }
                         let state = State {
                             value,
                             updated_at: now_ms(),

@@ -265,6 +265,16 @@ impl Entity {
             EntityKind::BinarySensor | EntityKind::Switch | EntityKind::Light => {
                 let on = self.state_on.as_deref().unwrap_or("ON");
                 let off = self.state_off.as_deref().unwrap_or("OFF");
+                // JSON-schema lights (ESPHome's default) wrap it: {"state":"ON",...}
+                let json_state;
+                let raw = if self.kind == EntityKind::Light && raw.starts_with('{') {
+                    json_state = serde_json::from_str::<serde_json::Value>(raw)
+                        .ok()
+                        .and_then(|v| Some(v.get("state")?.as_str()?.to_owned()))?;
+                    json_state.as_str()
+                } else {
+                    raw
+                };
                 if raw == on {
                     Some(Value::Bool(true))
                 } else if raw == off {
@@ -389,6 +399,16 @@ mod tests {
         assert_eq!(b.interpret("ON"), Some(Value::Bool(true)));
         assert_eq!(b.interpret("OFF"), Some(Value::Bool(false)));
         assert_eq!(b.interpret("MAYBE"), None);
+
+        let mut l = sensor();
+        l.kind = EntityKind::Light;
+        assert_eq!(l.interpret("ON"), Some(Value::Bool(true)));
+        assert_eq!(
+            l.interpret(r#"{"state":"ON","color_mode":"rgb","brightness":128}"#),
+            Some(Value::Bool(true))
+        );
+        assert_eq!(l.interpret(r#"{"state":"OFF"}"#), Some(Value::Bool(false)));
+        assert_eq!(l.interpret(r#"{"brightness":128}"#), None);
 
         let mut c = sensor();
         c.kind = EntityKind::Cover;
