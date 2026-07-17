@@ -1,10 +1,18 @@
-# vanifold node: electronics bay
-# ESP32 devkit on a screw-terminal breakout. DS18B20 battery temps, one relay
-# channel, 12V LED strip via D4184 MOSFET module.
+# vanifold node: electronics bay (currently doubling as the winch-door sim)
+# ESP32 devkit on a screw-terminal breakout. DS18B20 temp, pixel strip, and a
+# JGA25-370 motor reversed by two 1ch relays as a bench sim of the rear-entry
+# winch door. One reed switch is the endstop for BOTH directions: command the
+# cover, then bring the magnet near to stop travel (cam-style home sensor).
+# nodes/rear-entry.yaml is the real two-endstop config for the dedicated node.
 #
 # First flash (USB): esphome run electronics-bay.yaml
 # The boot log prints the 1-Wire addresses of attached DS18B20s; paste them
 # into the sensors below, then reflash (OTA works from then on).
+#
+# After the cover first appears, mark it safety-critical on the hub:
+#   curl -X PATCH http://<hub>:8480/api/entities/<cover-id> \
+#        -H 'Content-Type: application/json' -d '{"criticality":"safety"}'
+#   (find <cover-id> in http://<hub>:8480/api/entities, name "Door sim")
 
 esphome:
   name: vanifold-electronics-bay
@@ -42,45 +50,111 @@ one_wire:
 sensor:
   # Replace address: values with the ones from the first boot log.
   - platform: dallas_temp
-    address: 0x0000000000000000
-    name: Battery 1 temp
+    address: 0x993de10457c53428
+    name: Temp Sensor 1
     update_interval: 15s
-  - platform: dallas_temp
-    address: 0x0000000000000000
-    name: Battery 2 temp
-    update_interval: 15s
-  - platform: dallas_temp
-    address: 0x0000000000000000
-    name: Bay ambient temp
-    update_interval: 30s
+  # - platform: dallas_temp
+  #   address: 0xa03de104575ecf28
+  #   name: Battery 2 temp
+  #   update_interval: 15s
+  # - platform: dallas_temp
+  #   address: 0x0000000000000000
+  #   name: Bay ambient temp
+  #   update_interval: 30s
 
+# Motor reversing relays (1ch modules, active-high per bench testing).
+# internal: the cover is the only external interface; ALWAYS_OFF: motion
+# never resumes on its own after a power cycle; interlock: both directions
+# can never energize together.
 switch:
-  # 2ch opto relay module, 3.3V trigger. Most of these boards are active-low;
-  # if the relay clicks ON at boot or the state reads backwards, that's this
-  # flag being wrong for your board.
   - platform: gpio
     pin: GPIO26
-    inverted: true
-    name: Bay relay 1
-    restore_mode: RESTORE_DEFAULT_OFF
+    inverted: false
+    id: relay_open
+    name: Door open relay
+    internal: true
+    restore_mode: ALWAYS_OFF
+    interlock: [relay_close]
+    interlock_wait_time: 300ms
   - platform: gpio
     pin: GPIO27
-    inverted: true
-    name: Bay relay 2
-    restore_mode: RESTORE_DEFAULT_OFF
+    inverted: false
+    id: relay_close
+    name: Door close relay
+    internal: true
+    restore_mode: ALWAYS_OFF
+    interlock: [relay_open]
+    interlock_wait_time: 300ms
 
 # 12V LED strip through the D4184 module: PWM the gate input.
-output:
-  - platform: ledc
-    pin: GPIO25
-    id: strip_pwm
-    # above audible whine, below the AOD4184's comfortable switching ceiling
-    frequency: 19531Hz
+# output:
+#   - platform: ledc
+#     pin: GPIO25
+#     id: strip_pwm
+#     # above audible whine, below the AOD4184's comfortable switching ceiling
+#     frequency: 19531Hz
 
 light:
-  - platform: monochromatic
-    output: strip_pwm
-    name: Bay light strip
-    restore_mode: RESTORE_DEFAULT_OFF
+  # - platform: monochromatic
+  #   output: strip_pwm
+  #   name: Bay light strip
+  #   restore_mode: RESTORE_DEFAULT_OFF
     # Tier 2: broker loss changes nothing here; outputs hold their local
     # state and restore_mode covers power loss. No hub in the loop.
+  - platform: esp32_rmt_led_strip
+    pin: GPIO15
+    num_leds: 3
+    chipset: ws2812
+    rgb_order: GRB
+    name: Test pixel strip
+    restore_mode: RESTORE_DEFAULT_OFF
+
+binary_sensor:
+  # Reed switch repurposed as the door sim's home sensor: inverted so
+  # magnet-near (contact closed) reads ON = at endstop.
+  - platform: gpio
+    pin:
+      number: GPIO33
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    id: door_home
+    name: Door home
+    filters:
+      - delayed_on: 20ms
+      - delayed_off: 20ms
+  # Bump switch parked (breadboard contact too flaky); rewire on the
+  # dedicated rear-entry node.
+  # - platform: gpio
+  #   pin:
+  #     number: GPIO32
+  #     mode:
+  #       input: true
+  #       pullup: true
+  #     inverted: true
+  #   name: Bump Switch
+  #   filters:
+  #     - delayed_on: 20ms
+  #     - delayed_off: 20ms
+
+# ponytail: one reed serves as both endstops on this bench sim; feedback
+# cover thinks home = fully open AND fully closed. Position readout is
+# nonsense by construction; the stop-on-sensor and max_duration behavior
+# is what's under test. rear-entry.yaml has the honest two-endstop config.
+cover:
+  - platform: feedback
+    name: Door sim
+    device_class: gate
+    open_action:
+      - switch.turn_on: relay_open
+    open_duration: 8s
+    open_endstop: door_home
+    close_action:
+      - switch.turn_on: relay_close
+    close_duration: 8s
+    close_endstop: door_home
+    stop_action:
+      - switch.turn_off: relay_open
+      - switch.turn_off: relay_close
+    max_duration: 12s

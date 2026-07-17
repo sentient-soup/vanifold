@@ -1,0 +1,105 @@
+# vanifold node: rear entry (winch door)
+# Bench sim: JGA25-370 6V gearmotor reversed by two SPDT relays; the real
+# winch swaps the motor+buck for solenoid coils, same logic, same pins.
+#
+# Tier 2 safety lives HERE, per the three-tier law (docs/DESIGN.md):
+#   - relay interlock: open/close can never energize together
+#   - endstops stop travel on-node, hub not in the loop
+#   - max_duration kills motion if an endstop never arrives
+#   - relays are internal: the cover is the only external interface
+# After first discovery, mark the cover safety-critical on the hub:
+#   curl -X PATCH http://<hub>:8480/api/entities/vanifold-rear-entry-rear-door \
+#        -H 'Content-Type: application/json' -d '{"criticality":"safety"}'
+
+esphome:
+  name: vanifold-rear-entry
+  friendly_name: Rear entry
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+mqtt:
+  broker: !secret mqtt_broker
+  username: vanifold-node
+  password: !secret mqtt_password
+
+# Reversing relays. ALWAYS_OFF: motion must never resume by itself after a
+# power cycle. interlock + wait_time guarantees break-before-make so the
+# supply is never bridged mid-reversal.
+switch:
+  - platform: gpio
+    pin: GPIO26
+    inverted: true
+    id: relay_open
+    name: Winch open relay
+    internal: true
+    restore_mode: ALWAYS_OFF
+    interlock: [relay_close]
+    interlock_wait_time: 300ms
+  - platform: gpio
+    pin: GPIO27
+    inverted: true
+    id: relay_close
+    name: Winch close relay
+    internal: true
+    restore_mode: ALWAYS_OFF
+    interlock: [relay_open]
+    interlock_wait_time: 300ms
+
+# Endstops wired fail-safe: COM -> GND, NC -> pin. Circuit closed (LOW)
+# during travel; pressed OR a broken wire reads HIGH = at limit = stop.
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO32
+      mode:
+        input: true
+        pullup: true
+    id: limit_open
+    name: Door open limit
+    filters:
+      - delayed_on: 20ms
+      - delayed_off: 20ms
+  - platform: gpio
+    pin:
+      number: GPIO33
+      mode:
+        input: true
+        pullup: true
+    id: limit_close
+    name: Door closed limit
+    filters:
+      - delayed_on: 20ms
+      - delayed_off: 20ms
+
+# ponytail: ACS758 stall cutoff joins when the real winch does; its 20mV/A
+# signal is noise at this bench motor's current draw. GPIO34 (ADC) reserved.
+
+cover:
+  - platform: feedback
+    name: Rear door
+    device_class: gate
+    open_action:
+      - switch.turn_on: relay_open
+    open_duration: 8s
+    open_endstop: limit_open
+    close_action:
+      - switch.turn_on: relay_close
+    close_duration: 8s
+    close_endstop: limit_close
+    stop_action:
+      - switch.turn_off: relay_open
+      - switch.turn_off: relay_close
+    max_duration: 12s
