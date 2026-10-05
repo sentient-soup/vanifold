@@ -1,0 +1,77 @@
+# vanifold node: solar tilt (three independent panel actuators)
+# Wiring and rollout: docs/prototype.md, "Solar-tilt node".
+#
+# Plain 2-wire 12V linear actuators with built-in end limits, each reversed
+# by a relay pair (same topology as the bench motor: both relays idle = both
+# leads on GND = braked; both energized = both leads on +12V = no motion, so
+# a wrong relay state can't drive an actuator by accident). Position is
+# time-based: each run lasts the full stroke time, the actuator's own limit
+# stops the motion, then the relay releases.
+#
+# "Open" = panel tilted up, "closed" = stowed flat. Names contain "solar" so
+# the hub files them under Power.
+#
+# Tier 2: a broker or WiFi outage mid-travel changes nothing; the node's
+# timer finishes the run. Actuators are self-locking and hold position
+# unpowered.
+
+esphome:
+  name: vanifold-solar-tilt
+  friendly_name: Solar tilt
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+mqtt:
+  broker: !secret mqtt_broker
+  username: vanifold-node
+  password: !secret mqtt_password
+
+# Relay pairs per docs/hardware.md pin conventions: 26/27, 18/19, 22/23.
+# Multi-channel boards are usually active-low: if relays click on at boot,
+# flip every inverted flag.
+switch:
+  - {platform: gpio, pin: GPIO26, inverted: false, id: tilt1_up,   name: Tilt 1 up relay,   internal: true, restore_mode: ALWAYS_OFF, interlock: [tilt1_down], interlock_wait_time: 300ms}
+  - {platform: gpio, pin: GPIO27, inverted: false, id: tilt1_down, name: Tilt 1 down relay, internal: true, restore_mode: ALWAYS_OFF, interlock: [tilt1_up],   interlock_wait_time: 300ms}
+  - {platform: gpio, pin: GPIO18, inverted: false, id: tilt2_up,   name: Tilt 2 up relay,   internal: true, restore_mode: ALWAYS_OFF, interlock: [tilt2_down], interlock_wait_time: 300ms}
+  - {platform: gpio, pin: GPIO19, inverted: false, id: tilt2_down, name: Tilt 2 down relay, internal: true, restore_mode: ALWAYS_OFF, interlock: [tilt2_up],   interlock_wait_time: 300ms}
+  - {platform: gpio, pin: GPIO22, inverted: false, id: tilt3_up,   name: Tilt 3 up relay,   internal: true, restore_mode: ALWAYS_OFF, interlock: [tilt3_down], interlock_wait_time: 300ms}
+  - {platform: gpio, pin: GPIO23, inverted: false, id: tilt3_down, name: Tilt 3 down relay, internal: true, restore_mode: ALWAYS_OFF, interlock: [tilt3_up],   interlock_wait_time: 300ms}
+
+# MEASURE each actuator's full stroke (time it end to end under load) and
+# set both durations to that plus ~10%, so the built-in limit always ends
+# the motion before the relay releases.
+cover:
+  - platform: time_based
+    name: Solar tilt 1
+    open_action: [switch.turn_on: tilt1_up]
+    open_duration: 40s
+    close_action: [switch.turn_on: tilt1_down]
+    close_duration: 40s
+    stop_action: [switch.turn_off: tilt1_up, switch.turn_off: tilt1_down]
+  - platform: time_based
+    name: Solar tilt 2
+    open_action: [switch.turn_on: tilt2_up]
+    open_duration: 40s
+    close_action: [switch.turn_on: tilt2_down]
+    close_duration: 40s
+    stop_action: [switch.turn_off: tilt2_up, switch.turn_off: tilt2_down]
+  - platform: time_based
+    name: Solar tilt 3
+    open_action: [switch.turn_on: tilt3_up]
+    open_duration: 40s
+    close_action: [switch.turn_on: tilt3_down]
+    close_duration: 40s
+    stop_action: [switch.turn_off: tilt3_up, switch.turn_off: tilt3_down]
