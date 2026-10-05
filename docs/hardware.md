@@ -19,7 +19,7 @@ What we use, why, and what the bench taught us. Status reflects the October
 | JGA25-370 6V 133rpm gearmotor | Winch stand-in | Proven | Runs fine at 5V (~110rpm) |
 | Reed switch, microswitch (limit) | Contact / endstop sensing | Proven | Switch to GND, internal pullup, 20ms debounce |
 | WS2812 3-pixel strip (5V) | Addressable test article | Proven | Bench only; see LED decision below |
-| ACS758 100A hall sensor | Winch stall detection | Deferred | 20mV/A is noise at bench-motor currents; joins with the real winch |
+| ACS758 100A hall sensor | Winch stall detection | Shelved | Current must flow through the IC, so a winch cable would have to be cut and routed through it; a split-core DC hall sensor clamps on instead |
 | LM2596 buck | Spare adjustable rail | Unused | |
 | Amcrest IP camera | Future camera phase | Parked | |
 
@@ -32,9 +32,12 @@ interchangeable.
 |---|---|---|
 | 4 | 1-Wire bus (DS18B20) | General purpose, no boot role |
 | 25 | PWM light channel (D4184) | LEDC-capable, no boot role |
-| 26, 27 | Relay A, relay B (interlocked pair when reversing) | No boot role, safe idle state |
+| 26, 27 | Relay pair 1 (interlocked when reversing) | No boot role, safe idle state |
+| 18, 19 | Relay pair 2 | No boot role |
+| 22, 23 | Relay pair 3 | No boot role |
 | 32, 33 | Contact inputs (endstops, reed) | Internal pullups available |
-| 34 | Analog current sense (ACS758), reserved | Input-only ADC pin, fine for analog |
+| 13 | Ignition sense (opto input), reserved | No boot role, internal pullup |
+| 34 | Analog current sense, reserved | Input-only ADC pin, fine for analog |
 | 15, 16 | Addressable strip data | 15 is a strapping pin (only affects boot log), prefer 16 |
 
 Avoid for switches: GPIO34-39 (input-only, no internal pullups, a switch floats).
