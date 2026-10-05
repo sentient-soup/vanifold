@@ -5,9 +5,12 @@ subsystem cluster. Per the three-tier law (docs/DESIGN.md), control loops and
 failsafes run ON the node; the hub only orchestrates.
 
 Nodes:
-- `electronics-bay.yaml`: DS18B20 battery temps, 2ch relay, PWM light strip
-- `rear-entry` (planned): winch door as a feedback cover (interlocked solenoid
-  relays, limit switches, current-sense stall cutoff, max-runtime timeout)
+- `electronics-bay.yaml`: DS18B20 temps, pixel strip; currently doubling as
+  the winch-door bench sim (one reed as both endstops)
+- `rear-entry.yaml`: winch door as a feedback cover (interlocked relays, two
+  NC endstops, max-runtime timeout; current-sense stall cutoff deferred)
+
+Parts, pin conventions, and wiring lessons: `docs/hardware.md`.
 
 ## Flashing
 

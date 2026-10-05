@@ -84,6 +84,5 @@ future custom adapter); 2x 48V batteries -> bus bars -> 160A breaker -> inverter
 panel; 48->12V DC-DC (Victron Orion planned) -> 12V fuse block; winch direct off
 vehicle 12V. DC distribution still being built - adjustable.
 
-Hardware on hand: RPi 4 (hub) + RPi 3 (bench), Shelly 3EM + 3x 120A CTs, 3x DS18B20
-probes, Amcrest IP cam (parked), Arduinos (bench only, no radios).
-Shopping list: 2-3 ESP32 devkits, limit switches, Zigbee dongle (when needed).
+Hardware on hand, status, and the reasoning behind part choices: see
+`docs/hardware.md`.
