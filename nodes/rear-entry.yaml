@@ -1,12 +1,25 @@
-# vanifold node: rear entry (winch door)
-# Bench sim: JGA25-370 6V gearmotor reversed by two SPDT relays; the real
-# winch swaps the motor+buck for solenoid coils, same logic, same pins.
+# vanifold node: rear entry (winch-driven door)
+# Wiring and rollout: docs/prototype.md, "Rear-entry node".
 #
-# Tier 2 safety lives HERE, per the three-tier law (docs/DESIGN.md):
-#   - relay interlock: open/close can never energize together
-#   - endstops stop travel on-node, hub not in the loop
-#   - max_duration kills motion if an endstop never arrives
-#   - relays are internal: the cover is the only external interface
+# The node does not touch the winch's high-current side. Two relays sit in
+# the low-current rocker-switch circuit, daisy-chained so that:
+#   - relays idle (node off, dead, or unpowered): the rocker works exactly
+#     as stock (Tier 1 fallback)
+#   - either relay energized: the rocker and the other relay lose their feed,
+#     so winch IN and OUT can never be energized together from any mix of
+#     rocker and node (hardware interlock; the firmware interlock below is
+#     the second layer)
+#
+# Winch OUT lowers the door onto its catch (= open). Winch IN raises it to
+# the jamb (= closed). The open relay is first in the chain: if both relays
+# ever energized, the door lowers onto its catch (slack line) rather than
+# straining against the jamb.
+#
+# Stage 1 (monitor only): leave the WINCH CTRL plug in its bypass dongle.
+# The relays click into nothing; the endstops report door position under
+# manual operation. Read travel times off the endstop history, then set the
+# durations below before stage 2.
+#
 # After first discovery, mark the cover safety-critical on the hub:
 #   curl -X PATCH http://<hub>:8480/api/entities/vanifold-rear-entry-rear-door \
 #        -H 'Content-Type: application/json' -d '{"criticality":"safety"}'
@@ -35,31 +48,31 @@ mqtt:
   username: vanifold-node
   password: !secret mqtt_password
 
-# Reversing relays. ALWAYS_OFF: motion must never resume by itself after a
-# power cycle. interlock + wait_time guarantees break-before-make so the
-# supply is never bridged mid-reversal.
+# 1ch opto modules with 3V coils, active-high (proven on the bench). A wrong
+# inverted flag here energizes a relay at boot and drives the door: verify
+# both relays stay silent through a reboot before stage 2.
 switch:
   - platform: gpio
     pin: GPIO26
-    inverted: true
+    inverted: false
     id: relay_open
-    name: Winch open relay
+    name: Winch out relay
     internal: true
     restore_mode: ALWAYS_OFF
     interlock: [relay_close]
     interlock_wait_time: 300ms
   - platform: gpio
     pin: GPIO27
-    inverted: true
+    inverted: false
     id: relay_close
-    name: Winch close relay
+    name: Winch in relay
     internal: true
     restore_mode: ALWAYS_OFF
     interlock: [relay_open]
     interlock_wait_time: 300ms
 
-# Endstops wired fail-safe: COM -> GND, NC -> pin. Circuit closed (LOW)
-# during travel; pressed OR a broken wire reads HIGH = at limit = stop.
+# Endstops on NC contacts: COM -> GND, NC -> pin. Closed (LOW) away from the
+# limit; pressed OR a broken wire reads HIGH = at limit = stop.
 binary_sensor:
   - platform: gpio
     pin:
@@ -68,7 +81,7 @@ binary_sensor:
         input: true
         pullup: true
     id: limit_open
-    name: Door open limit
+    name: Door on catch
     filters:
       - delayed_on: 20ms
       - delayed_off: 20ms
@@ -79,13 +92,14 @@ binary_sensor:
         input: true
         pullup: true
     id: limit_close
-    name: Door closed limit
+    name: Door at jamb
     filters:
       - delayed_on: 20ms
       - delayed_off: 20ms
 
-# ponytail: ACS758 stall cutoff joins when the real winch does; its 20mV/A
-# signal is noise at this bench motor's current draw. GPIO34 (ADC) reserved.
+# ponytail: no stall detection yet. max_duration is the backstop if the jamb
+# switch fails. Upgrade path: split-core DC hall sensor (not the ACS758, which
+# needs the motor cable cut and routed through it) on GPIO34.
 
 cover:
   - platform: feedback
@@ -93,13 +107,15 @@ cover:
     device_class: gate
     open_action:
       - switch.turn_on: relay_open
-    open_duration: 8s
+    # MEASURE in stage 1 (endstop history), then set: open/close = measured
+    # travel time, max_duration = the longer one plus ~20%.
+    open_duration: 20s
     open_endstop: limit_open
     close_action:
       - switch.turn_on: relay_close
-    close_duration: 8s
+    close_duration: 20s
     close_endstop: limit_close
     stop_action:
       - switch.turn_off: relay_open
       - switch.turn_off: relay_close
-    max_duration: 12s
+    max_duration: 25s
