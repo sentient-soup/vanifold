@@ -53,18 +53,37 @@ Use round jacketed cable (2-4 conductor) so the cable glands seal on it:
 ### Enclosure
 
 `nodes/enclosure.scad`: a parametric box with a screw-down lid, PG7 cable
-gland holes, mounting ears, and optional board standoffs. Export commands
-for each node are in the file header.
+gland holes, floor mounting holes, and optional board standoffs. Export
+commands for each node are in the file header (render into `nodes/stl/`,
+which is gitignored).
 
-- Print in **PETG or ASA, not PLA**: a parked van's interior passes PLA's
-  ~55C softening point. 0.2mm layers, 4 perimeters, 25% infill, box printed
-  open side up, no supports needed.
 - Each harness leaves the box as a short pigtail (~15cm) through a PG7
   gland, ending in its connector. No connector panel cutouts to get right.
-- Lid: M3 self-tapping screws into the corner posts (or set
-  `post_hole=4.0` for heat-set inserts). Boards: VHB tape, or measure their
-  holes and list them in `standoffs`.
-- Mount with screws through the ears, or VHB for no-drill testing.
+- Boards: VHB tape, or measure their holes and list them in `standoffs`.
+- Mount with screws through the two floor holes, or VHB for no-drill testing.
+
+**Prototypes: Formlabs Form 2 (resin).** The shells are prototypes; expect
+to reprint as the builds change.
+
+- Both bases are 144.8mm long against a 145mm platform, so they only fit
+  tilted 42 degrees or more. That steep tilt is also the right resin
+  orientation. Let PreForm auto-orient, then check its cup warnings: if it
+  flags the cavity, rotate so the open side faces the build platform (a
+  hollow sealed on the platform side and open to the tank creates suction
+  on every peel).
+- Keep supports off the rim, where the lid seals.
+- Resin trade-off: standard Grey resists heat best (~73C post-cured) but is
+  brittle; Tough 2000 survives screws and knocks better but softens near
+  53C. Either is fine for testing; don't leave a resin shell in a closed van
+  through a hot afternoon.
+- Lid screws: tap the 2.5mm post holes M3 by hand. Self-tapping screws crack
+  resin, and heat-set inserts don't work in it (it doesn't melt). Snug the
+  gland nuts; don't crank them.
+
+**Finals: print service.** Once a node's build settles, order its shell in
+MJF PA12 nylon (JLCPCB, PCBWay, Xometry and similar): tough, unaffected by
+van temperatures, and it takes heat-set inserts. Export with `ears=true` and
+`post_hole=4.0`. ASA on an FDM printer also works.
 
 ### Network
 
@@ -236,5 +255,5 @@ and belongs on this node, not the hub.
 | MP1584 buck | 1 more | One per node |
 | Round jacketed cable: 2-4 conductor 16AWG and 20-22AWG | some | Harnesses |
 | Wago 221 lever nuts | 1 pack | Power distribution in the solar box |
-| PETG or ASA filament, M3 screws | | Enclosures |
+| M3 x 8mm screws, M3 hand tap | | Enclosure lids (resin prototypes) |
 | Travel router (GL.iNet class) | 1 | Van LAN, if not already owned |
